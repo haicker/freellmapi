@@ -1,6 +1,7 @@
 import type { ModelListRow } from '@freellmapi/shared/types.js';
 import { getDb } from '../db/index.js';
 import { isUnifyEnabled, getModelGroups } from './model-groups.js';
+import { resolveProvider } from '../providers/index.js';
 
 // Shared catalog-listing logic behind both the OpenAI `GET /v1/models` and the
 // Anthropic `GET /v1/models` endpoints, so the two wire formats list the exact
@@ -97,6 +98,23 @@ export function buildModelListing(): ModelListing {
   // Stable order: usable first, then enabled, then smartest, then name.
   allListed.sort((a, b) =>
     (b.available - a.available) || (b.enabled - a.enabled) || (a.intel - b.intel) || a.name.localeCompare(b.name));
+
+  // KEYLESS PROVIDERS (kilo / pollinations / ovh / aihorde) need no API key, so
+  // a model on a registered keyless platform can be available and advertised as
+  // connected — BUT only when the user explicitly opted in (the Keys page /
+  // declarative config create an api_keys sentinel row for the platform). Seeded
+  // keyless models ship with NO row and must NOT be advertised as connected, or
+  // they'd look usable in the UI while the auto-router ignores them (and the
+  // routing gate in selectKeyForModel keeps them out of auto for the same
+  // reason). Disabled models stay disabled regardless of platform.
+  for (const m of allListed) {
+    if (m.enabled === 1 && resolveProvider(m.platform as any)?.keyless) {
+      const optedIn = db.prepare(
+        "SELECT 1 FROM api_keys WHERE platform = ? AND enabled = 1 LIMIT 1"
+      ).get(m.platform);
+      if (optedIn) m.available = 1;
+    }
+  }
 
   const availableContextWindows = allListed
     .filter(m => m.available === 1 && m.contextWindow != null)

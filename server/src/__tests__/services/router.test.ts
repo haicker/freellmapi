@@ -23,6 +23,10 @@ describe('Router', () => {
     db.prepare('DELETE FROM api_keys').run();
     // Disable active profile so the router falls back to fallback_config
     db.prepare("DELETE FROM settings WHERE key = 'active_profile_id'").run();
+    // Disable keyless platforms so the "no keys configured" tests still prove
+    // the real failure mode (a keyless provider now routes WITHOUT a key row —
+    // see the dedicated keyless test below).
+    db.prepare("UPDATE models SET enabled = 0 WHERE platform IN ('kilo','pollinations','ovh','aihorde')").run();
     // Reset fallback order to intelligence ranking
     const models = db.prepare('SELECT id, intelligence_rank FROM models ORDER BY intelligence_rank ASC').all() as any[];
     const update = db.prepare('UPDATE fallback_config SET priority = ? WHERE model_db_id = ?');
@@ -221,6 +225,63 @@ describe('Router', () => {
       penalty: 3,
     });
   });
+
+  it('routes an opted-in keyless provider without a real key (#keyless)', () => {
+    const db = getDb();
+    // Keyless is OPT-IN: a keyless platform routes in auto only once the user
+    // added it (the Keys page / declarative config create an api_keys sentinel
+    // row for the platform). Simulate that opt-in for `kilo` and confirm the
+    // router serves it with the synthetic no-key route.
+    db.prepare('DELETE FROM api_keys').run();
+    db.prepare("UPDATE models SET enabled = 0 WHERE platform NOT IN ('kilo')").run();
+    db.prepare("UPDATE models SET enabled = 1 WHERE platform = 'kilo'").run();
+    const sentinel = encrypt('no-key');
+    db.prepare(
+      `INSERT INTO api_keys (platform, label, encrypted_key, iv, auth_tag, status, enabled)
+       VALUES ('kilo', 'anon', ?, ?, ?, 'healthy', 1)`
+    ).run(sentinel.encrypted, sentinel.iv, sentinel.authTag);
+
+    const result = routeRequest();
+    expect(result.platform).toBe('kilo');
+    expect(result.apiKey).toBe('no-key');
+  });
+
+  it('does NOT auto-route a seeded keyless provider that was never opted-in (#keyless)', () => {
+    const db = getDb();
+    // Seeded keyless models ship with NO api_keys row. The auto-router must NOT
+    // pull them into routing (e.g. the "smartest" global sort ranks EVERY
+    // enabled model), or providers the user never enabled would get called.
+    // With no opt-in row, routeRequest should exhaust and throw.
+    db.prepare('DELETE FROM api_keys').run();
+    db.prepare("UPDATE models SET enabled = 0 WHERE platform NOT IN ('kilo','pollinations','ovh','aihorde')").run();
+    db.prepare("UPDATE models SET enabled = 1 WHERE platform IN ('kilo','pollinations','ovh','aihorde')").run();
+    // Intentionally no api_keys row for any keyless platform.
+
+    let caught: any;
+    try { routeRequest(); } catch (e) { caught = e; }
+    expect(caught).toBeDefined();
+    expect(caught.message).toMatch(/no usable key configured|models exhausted/i);
+  });
+
+  it('serves a hard-pinned keyless model even without an opt-in row (#keyless)', () => {
+    const db = getDb();
+    // A user EXPLICITLY naming a keyless model must work without opting in —
+    // the model needs no key, and pinning is an explicit choice. Only AUTO
+    // routing requires the opt-in api_keys row; a pinned request is exempt
+    // (see allowKeylessWithoutOptIn). This guards against regressing direct
+    // "call this keyless model" requests.
+    db.prepare('DELETE FROM api_keys').run();
+    db.prepare("UPDATE models SET enabled = 1 WHERE platform = 'kilo'").run();
+    const kilo = db.prepare(
+      "SELECT id FROM models WHERE platform = 'kilo' AND enabled = 1 LIMIT 1"
+    ).get() as { id: number } | undefined;
+    expect(kilo).toBeDefined();
+
+    const result = routeRequest(1000, undefined, kilo!.id);
+    expect(result.platform).toBe('kilo');
+    expect(result.apiKey).toBe('no-key');
+    expect(result.keyId).toBe(-1);
+  });
 });
 
 describe('Router exhaustion diagnostics (issue _1)', () => {
@@ -235,6 +296,9 @@ describe('Router exhaustion diagnostics (issue _1)', () => {
     db.prepare('DELETE FROM api_keys').run();
     db.prepare("DELETE FROM settings WHERE key = 'active_profile_id'").run();
     db.prepare('DELETE FROM rate_limit_cooldowns').run();
+    // Disable keyless platforms so the exhaustion path is still reachable
+    // (keyless providers now route without a key row).
+    db.prepare("UPDATE models SET enabled = 0 WHERE platform IN ('kilo','pollinations','ovh','aihorde')").run();
   });
 
   afterEach(() => {

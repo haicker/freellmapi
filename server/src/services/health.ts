@@ -20,6 +20,21 @@ export async function checkKeyHealth(keyId: number): Promise<KeyStatus> {
 
   try {
     const apiKey = decrypt(row.encrypted_key, row.iv, row.auth_tag);
+
+    // KEYLESS sentinel rows ('no-key') are always valid: the provider omits the
+    // Authorization header and routes anonymously, so there is no credential to
+    // validate. More importantly, some keyless upstreams return 401 for a
+    // keyless GET /models, which would make validateKey() report the sentinel
+    // as invalid and — after 3 consecutive checks — auto-disable the platform
+    // in routing, reproducing the "only keyless providers configured" failure.
+    // Mark healthy and skip the network probe entirely.
+    if (provider.keyless && apiKey === 'no-key') {
+      db.prepare("UPDATE api_keys SET status = 'healthy', last_checked_at = datetime('now') WHERE id = ?")
+        .run(keyId);
+      failureCount.delete(keyId);
+      return 'healthy';
+    }
+
     const isValid = await provider.validateKey(apiKey);
 
     const status: KeyStatus = isValid ? 'healthy' : 'invalid';

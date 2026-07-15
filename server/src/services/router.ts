@@ -621,15 +621,22 @@ export function resolveRoutingChain(modelString: string | undefined): ResolvedCh
  * context window) stay in the caller; this only does key selection + accounting
  * pre-checks.
  */
-function selectKeyForModel(entry: ChainRow, estimatedTokens: number, skipKeys?: Set<string>, diag?: string[]): RouteResult | null {
+/**
+ * Select a usable API-key-backed route for a model (the normal, keyed path).
+ * Returns null when every keyed option is unavailable right now (all cooled
+ * down, over quota, undecryptable, status not healthy/unknown, or no key row
+ * at all). `diag`, when provided, accumulates the per-key/per-model reason for
+ * the failure so the exhaustion error can report *why* (issue _1).
+ */
+function selectRealKeyForModel(
+  entry: ChainRow,
+  provider: BaseProvider,
+  estimatedTokens: number,
+  skipKeys?: Set<string>,
+  diag?: string[],
+): RouteResult | null {
   const db = getDb();
   const label = `${entry.platform}/${entry.model_id}`;
-
-  if (!hasProvider(entry.platform as Platform)) {
-    diag?.push(`${label}: no provider registered`);
-    return null;
-  }
-  const provider = getProvider(entry.platform as Platform)!;
 
   const keys = db.prepare(
     "SELECT * FROM api_keys WHERE platform = ? AND enabled = 1 AND status IN ('healthy', 'unknown')"
@@ -705,6 +712,78 @@ function selectKeyForModel(entry: ChainRow, estimatedTokens: number, skipKeys?: 
   const summary = Object.entries(skipTally).map(([r, n]) => `${r}:${n}`).join(', ') || 'no usable key';
   diag?.push(`${label}: ${keys.length} key(s) — ${summary}`);
   return null;
+}
+
+/**
+ * Pick a usable key for ONE model and build its RouteResult, or return null if
+ * the model has no key that can serve the request right now.
+ *
+ * KEYLESS PROVIDERS (kilo / pollinations / ovh / aihorde) need no API key and
+ * route out of the box — see selectKeyForModel below — so this only does key
+ * selection + accounting pre-checks for keyed models.
+ */
+function selectKeyForModel(entry: ChainRow, estimatedTokens: number, skipKeys?: Set<string>, diag?: string[], allowKeylessWithoutOptIn = false): RouteResult | null {
+  const db = getDb();
+  const label = `${entry.platform}/${entry.model_id}`;
+
+  if (!hasProvider(entry.platform as Platform)) {
+    diag?.push(`${label}: no provider registered`);
+    return null;
+  }
+  const provider = getProvider(entry.platform as Platform)!;
+
+  // KEYLESS PROVIDERS need no API key, but they are OPT-IN: a keyless model
+  // routes in auto only when the user explicitly enabled the platform (the Keys
+  // page / declarative config create an api_keys sentinel row for it). Seeded
+  // keyless models ship with NO row and must NOT be auto-activated — otherwise
+  // the "smartest"/global-sort chain (which ranks EVERY enabled model via
+  // `FROM models WHERE enabled = 1`) would silently pull every seeded keyless
+  // model into auto routing, calling providers the user never opted into.
+  // A real registered key (an authenticated/upgraded account) still takes
+  // precedence when one is present and usable — selectRealKeyForModel tries it
+  // first — but its absence must NOT block the model. If no usable keyed route
+  // exists we synthesize one with the documented sentinel key; the provider
+  // omits the Authorization header for keyless platforms, so the placeholder is
+  // never sent upstream. Without this, auto-routing would throw
+  //   "All models exhausted: N routes checked (N no usable key configured)"
+  // whenever ONLY keyless providers are configured (the seed never auto-creates
+  // the keyless sentinel row, and the 5-minute health checker could otherwise
+  // flip an existing sentinel to `invalid`/disabled — see health.ts).
+  if (provider.keyless) {
+    const keyed = selectRealKeyForModel(entry, provider, estimatedTokens, skipKeys, diag);
+    if (keyed) return keyed;
+    // Keyless is OPT-IN for AUTO routing: a keyless model routes in auto only
+    // when the user explicitly enabled the platform (the Keys page / declarative
+    // config create an api_keys sentinel row for it). Seeded keyless models ship
+    // with NO row and must NOT be auto-activated — otherwise the "smartest"/
+    // global-sort chain (which ranks EVERY enabled model via
+    // `FROM models WHERE enabled = 1`) would silently pull every seeded keyless
+    // model into auto routing, calling providers the user never opted into.
+    // A HARD-PINNED keyless model (allowKeylessWithoutOptIn, e.g. an explicit
+    // model request or a fusion panel slot) is exempt: the user named that exact
+    // model, and keyless needs no key, so it must serve.
+    const optedIn = db.prepare(
+      "SELECT 1 FROM api_keys WHERE platform = ? AND enabled = 1 LIMIT 1"
+    ).get(entry.platform);
+    if (!optedIn && !allowKeylessWithoutOptIn) {
+      diag?.push(`${label}: keyless provider not opted-in (no api_keys row)`);
+      return null;
+    }
+    roundRobinIndex.set(`${entry.platform}:${entry.model_id}`, 0);
+    return {
+      provider,
+      modelId: entry.model_id,
+      modelDbId: entry.model_db_id,
+      apiKey: 'no-key',
+      keyId: -1,
+      platform: entry.platform,
+      displayName: entry.display_name,
+      rpdLimit: entry.rpd_limit,
+      tpdLimit: entry.tpd_limit,
+    };
+  }
+
+  return selectRealKeyForModel(entry, provider, estimatedTokens, skipKeys, diag);
 }
 
 /**
@@ -786,7 +865,7 @@ export function routePinnedModel(modelDbId: number, estimatedTokens = 1000, skip
   if (!entry) return null;
   if (entry.context_window != null && estimatedTokens > entry.context_window) return null;
   if (entry.tpm_limit != null && estimatedTokens > entry.tpm_limit) return null;
-  return selectKeyForModel(entry, estimatedTokens, skipKeys);
+  return selectKeyForModel(entry, estimatedTokens, skipKeys, undefined, true);
 }
 
 /**
@@ -870,6 +949,14 @@ export function getOrderedFusionChain(): FusionCandidate[] {
     if (arr) arr.push(k.id); else keysByPlatform.set(k.platform, [k.id]);
   }
   const servable = chain.filter(e => {
+    // KEYLESS platforms are servable ONLY when opted-in (an api_keys row exists
+    // for the platform — see selectKeyForModel). Seeded keyless models ship with
+    // no row and must not claim a fusion-panel slot the user never enabled.
+    if (resolveProvider(e.platform as Platform)?.keyless) {
+      return !!db.prepare(
+        "SELECT 1 FROM api_keys WHERE platform = ? AND enabled = 1 LIMIT 1"
+      ).get(e.platform);
+    }
     const keyIds = keysByPlatform.get(e.platform);
     if (!keyIds) return false;
     const limits = { rpm: e.rpm_limit, rpd: e.rpd_limit, tpm: e.tpm_limit, tpd: e.tpd_limit };
@@ -1044,7 +1131,7 @@ export function routeRequest(estimatedTokens = 1000, skipKeys?: Set<string>, pre
     // first usable key's RouteResult, or null when the model has no key that
     // can serve right now — in which case we fall through to the next model in
     // the sorted chain for THIS request (no explicit penalty needed).
-    const route = selectKeyForModel(entry, estimatedTokens, skipKeys, diag);
+    const route = selectKeyForModel(entry, estimatedTokens, skipKeys, diag, entry.model_db_id === preferredModelDbId);
     if (route) return route;
   }
 

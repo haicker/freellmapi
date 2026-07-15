@@ -9,6 +9,10 @@ import { setCooldown } from '../../services/ratelimit.js';
 
 let dashToken = '';
 
+// Platforms registered `keyless: true` — they route WITHOUT an api_keys row
+// (see providers/index.ts, providers/aihorde.ts and router.selectKeyForModel).
+const KEYLESS_PLATFORMS = new Set(['kilo', 'pollinations', 'ovh', 'aihorde']);
+
 async function request(app: Express, method: string, path: string, body?: any, headers: Record<string, string> = {}) {
   const server = app.listen(0);
   const addr = server.address() as any;
@@ -152,6 +156,12 @@ describe('fusion route (/v1/chat/completions, model: "fusion")', () => {
     db.prepare('DELETE FROM api_keys').run();
     db.prepare('DELETE FROM requests').run();
     db.prepare("DELETE FROM settings WHERE key = 'fusion_config'").run();
+    // Disable keyless platforms so the fusion REQUEST path (which makes real
+    // upstream calls the mocks don't cover) doesn't attempt unmocked keyless
+    // hosts. Keyless routing is covered deterministically by router.test.ts
+    // (#keyless) and proxy-auto-model.test.ts; the one fusion test that checks
+    // keyless panel membership re-enables them inline (no network call there).
+    db.prepare("UPDATE models SET enabled = 0 WHERE platform IN ('kilo','pollinations','ovh','aihorde')").run();
     for (const platform of ['groq', 'cerebras', 'openrouter']) {
       const r = await request(app, 'POST', '/api/keys', { platform, key: `k_${platform}_fusion`, label: 'fusion-test' });
       expect(r.status).toBe(201);
@@ -415,8 +425,11 @@ describe('fusion route (/v1/chat/completions, model: "fusion")', () => {
     }
   });
 
-  it('auto-panel excludes models whose platform has no usable key', async () => {
+  it('auto-panel excludes models whose platform has no usable key (keyless still included)', async () => {
     const db = getDb();
+    // This test only reads getOrderedFusionChain (no upstream call), so re-enable
+    // the keyless platforms the beforeEach disabled to verify they still appear.
+    db.prepare("UPDATE models SET enabled = 1 WHERE platform IN ('kilo','pollinations','ovh','aihorde')").run();
     // Strip every key, then configure ONLY groq — no cerebras/openrouter/etc.
     db.prepare('DELETE FROM api_keys').run();
     const r = await request(app, 'POST', '/api/keys', { platform: 'groq', key: 'k_groq_only', label: 'only-groq' });
@@ -424,10 +437,11 @@ describe('fusion route (/v1/chat/completions, model: "fusion")', () => {
 
     const candidates = getOrderedFusionChain();
     expect(candidates.length).toBeGreaterThan(0);
-    // Even though the seeded catalog has many higher-ranked models on other
-    // platforms (cerebras, openrouter, opencode…), none are routable without a
-    // key — so the panel pool is groq-only.
-    expect(candidates.every(c => c.platform === 'groq')).toBe(true);
+    // Every NON-keyless platform in the pool must be groq — the only one we
+    // configured a key for. Keyless platforms (kilo/pollinations/ovh/aihorde)
+    // route without a key row, so they must still appear in the panel pool.
+    const nonKeyless = candidates.filter(c => !KEYLESS_PLATFORMS.has(c.platform));
+    expect(nonKeyless.every(c => c.platform === 'groq')).toBe(true);
   });
 
   it('auto-panel excludes a model whose only key is on cooldown', async () => {
