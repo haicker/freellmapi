@@ -38,12 +38,10 @@
 
 ### 方式一：Docker（推荐）
 
-```bash
-# 1. 克隆仓库
-git clone https://github.com/haicker/freellmapi.git
-cd freellmapi
+在项目根目录中创建 `.env` 文件（至少配置 `ENCRYPTION_KEY`），然后构建并启动：
 
-# 2. 生成加密密钥并写入 .env
+```bash
+# 1. 生成加密密钥并写入 .env
 #    Linux / macOS:
 ENCRYPTION_KEY="$(node -e 'console.log(require("crypto").randomBytes(32).toString("hex"))')"
 printf "ENCRYPTION_KEY=%s\nPORT=3001\n" "$ENCRYPTION_KEY" > .env
@@ -51,7 +49,7 @@ printf "ENCRYPTION_KEY=%s\nPORT=3001\n" "$ENCRYPTION_KEY" > .env
 # $ENCRYPTION_KEY = node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 # "ENCRYPTION_KEY=$ENCRYPTION_KEY`nPORT=3001" | Out-File -Encoding utf8 .env
 
-# 3. 构建并启动
+# 2. 构建并启动
 docker compose up -d
 
 # 查看日志

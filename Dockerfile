@@ -1,34 +1,16 @@
-FROM node:22-slim AS builder
-
-WORKDIR /app
-
-# Copy workspace root + package manifests first for layer caching
-COPY package.json package-lock.json ./
-COPY shared/package.json shared/
-COPY server/package.json server/
-COPY client/package.json client/
-
-RUN npm ci
-
-# Copy source and build
-COPY . .
-RUN npm run build
-
-# --- Runtime stage ---
 FROM node:22-slim
 
 WORKDIR /app
 
-# Copy built artifacts + runtime deps only
-COPY package.json package-lock.json ./
-COPY shared/package.json shared/
-COPY server/package.json server/
+# Copy all source (npm workspaces: shared / server / client)
+COPY . .
 
-RUN npm ci --omit=dev
+# Install all dependencies and build
+RUN npm ci
+RUN npm run build
 
-COPY --from=builder /app/server/dist server/dist/
-COPY --from=builder /app/client/dist client/dist/
-COPY shared/ shared/
+# Remove dev dependencies to slim down the image
+RUN npm prune --omit=dev
 
 # SQLite data directory (mounted as a volume in compose)
 RUN mkdir -p server/data
