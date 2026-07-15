@@ -15,10 +15,10 @@ RUN npm ci
 
 # Build server: tsc emits JS even with type errors (noEmitOnError defaults to false)
 # || true allows the build to continue despite pre-existing type errors
-RUN npx tsc -p server/tsconfig.json || true
+RUN npm run build -w server || true
 
-# Build client: skip tsc -b type-checking, run vite build directly
-RUN npx vite build --config client/vite.config.ts --mode production
+# Build client: vite needs to run from client/ dir where index.html lives
+RUN cd client && npx vite build
 
 # Remove dev dependencies to slim down the image
 RUN npm prune --omit=dev
