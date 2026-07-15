@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+server/dist/
+client/dist/
+
+# Environment
+.env
+.encryption-key
+
+# Database
+server/data/*.db
+server/data/*.db-shm
+server/data/*.db-wal
+server/data/*.db.backup
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Misc
+nul
+.workbuddy/
