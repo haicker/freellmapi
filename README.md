@@ -36,6 +36,49 @@
 
 ## 部署说明
 
+### 方式一：Docker（推荐）
+
+```bash
+# 1. 克隆仓库
+git clone https://github.com/haicker/freellmapi.git
+cd freellmapi
+
+# 2. 生成加密密钥并写入 .env
+#    Linux / macOS:
+ENCRYPTION_KEY="$(node -e 'console.log(require("crypto").randomBytes(32).toString("hex"))')"
+printf "ENCRYPTION_KEY=%s\nPORT=3001\n" "$ENCRYPTION_KEY" > .env
+#    Windows PowerShell:
+# $ENCRYPTION_KEY = node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+# "ENCRYPTION_KEY=$ENCRYPTION_KEY`nPORT=3001" | Out-File -Encoding utf8 .env
+
+# 3. 构建并启动
+docker compose up -d
+
+# 查看日志
+docker compose logs -f
+```
+
+容器端口默认绑定到 `0.0.0.0:3001`，可在同网络内通过 `http://<服务器IP>:3001` 访问。SQLite 数据持久化在 `freellmapi-data` volume 中。
+
+> 如需限制仅本机访问，在 `.env` 中加 `HOST=127.0.0.1`，并将 `docker-compose.yml` 的端口映射改为 `127.0.0.1:3001:3001`。
+
+<details>
+<summary>自定义端口或其他环境变量</summary>
+
+在 `.env` 中添加所需变量即可（compose 通过 `env_file` 自动注入），例如：
+
+```env
+ENCRYPTION_KEY=your-64-char-hex
+PORT=8080
+PROXY_RATE_LIMIT_RPM=60
+REQUEST_ANALYTICS_RETENTION_DAYS=30
+```
+
+改端口后同步修改 `docker-compose.yml` 的 `ports` 映射。
+
+</details>
+
+### 方式二：直接运行（Node.js）
 
 ```bash
 # 1. 安装依赖并构建

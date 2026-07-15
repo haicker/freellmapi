@@ -1,0 +1,12 @@
+node_modules
+server/dist
+client/dist
+server/data/*.db
+server/data/*.db-shm
+server/data/*.db-wal
+.env
+.encryption-key
+.git
+.workbuddy
+nul
+*.log
