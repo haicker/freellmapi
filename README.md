@@ -38,10 +38,11 @@
 
 ### 方式一：Docker（推荐）
 
-在项目根目录中创建 `.env` 文件（至少配置 `ENCRYPTION_KEY`），然后构建并启动：
+镜像发布在 GHCR，开箱即用：
 
 ```bash
-# 1. 生成加密密钥并写入 .env
+# 1. 创建工作目录并生成 .env
+mkdir freellmapi && cd freellmapi
 #    Linux / macOS:
 ENCRYPTION_KEY="$(node -e 'console.log(require("crypto").randomBytes(32).toString("hex"))')"
 printf "ENCRYPTION_KEY=%s\nPORT=3001\n" "$ENCRYPTION_KEY" > .env
@@ -49,14 +50,18 @@ printf "ENCRYPTION_KEY=%s\nPORT=3001\n" "$ENCRYPTION_KEY" > .env
 # $ENCRYPTION_KEY = node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 # "ENCRYPTION_KEY=$ENCRYPTION_KEY`nPORT=3001" | Out-File -Encoding utf8 .env
 
-# 2. 构建并启动
+# 2. 下载 docker-compose.yml 并启动
+#    Linux / macOS:
+curl -fsSL https://raw.githubusercontent.com/haicker/freellmapi/main/docker-compose.yml -o docker-compose.yml
 docker compose up -d
 
 # 查看日志
 docker compose logs -f
 ```
 
-容器端口默认绑定到 `0.0.0.0:3001`，可在同网络内通过 `http://<服务器IP>:3001` 访问。SQLite 数据持久化在 `freellmapi-data` volume 中。
+镜像地址：`ghcr.io/haicker/freellmapi:latest`
+
+容器端口默认绑定到 `0.0.0.0:3001`，可通过 `http://<服务器IP>:3001` 访问。SQLite 数据持久化在 `freellmapi-data` volume 中。
 
 > 如需限制仅本机访问，在 `.env` 中加 `HOST=127.0.0.1`，并将 `docker-compose.yml` 的端口映射改为 `127.0.0.1:3001:3001`。
 

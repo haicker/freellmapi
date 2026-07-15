@@ -1,6 +1,6 @@
 services:
   freellmapi:
-    build: .
+    image: ghcr.io/haicker/freellmapi:latest
     container_name: freellmapi
     ports:
       - "3001:3001"
