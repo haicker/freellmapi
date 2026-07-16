@@ -99,8 +99,8 @@ describe('bandit router', () => {
   });
 
   it('priority strategy follows the manual chain order deterministically', () => {
-    addModel({ platform: 'google', modelId: 'a', name: 'A', intelligenceRank: 9, sizeLabel: 'Small', budget: '~10M', priority: 1 });
-    addModel({ platform: 'groq', modelId: 'b', name: 'B', intelligenceRank: 1, sizeLabel: 'Frontier', budget: '~10M', priority: 2 });
+    addModel({ platform: 'google', modelId: 'a', name: 'A', intelligenceRank: 10, sizeLabel: 'Small', budget: '~10M', priority: 1 });
+    addModel({ platform: 'groq', modelId: 'b', name: 'B', intelligenceRank: 90, sizeLabel: 'Frontier', budget: '~10M', priority: 2 });
     setRoutingStrategy('priority');
     refreshStatsCache(getDb(), true);
     const counts = pickCounts(50);
@@ -130,8 +130,8 @@ describe('bandit router', () => {
 
   it('smartest vs fastest flips which model wins, at equal reliability', () => {
     // Smart: frontier tier, slow. Fast: small tier, high throughput. Equal success.
-    addModel({ platform: 'google', modelId: 'smart', name: 'Smart', intelligenceRank: 1, sizeLabel: 'Frontier', budget: '~50M', priority: 1 });
-    addModel({ platform: 'groq', modelId: 'fast', name: 'Fast', intelligenceRank: 9, sizeLabel: 'Small', budget: '~50M', priority: 2 });
+    addModel({ platform: 'google', modelId: 'smart', name: 'Smart', intelligenceRank: 90, sizeLabel: 'Frontier', budget: '~50M', priority: 1 });
+    addModel({ platform: 'groq', modelId: 'fast', name: 'Fast', intelligenceRank: 10, sizeLabel: 'Small', budget: '~50M', priority: 2 });
     addHistory('google', 'smart', { successes: 40, failures: 1, outTokens: 100, latencyMs: 3000, ttfbMs: 2500 });
     addHistory('groq', 'fast', { successes: 40, failures: 1, outTokens: 1000, latencyMs: 1000, ttfbMs: 150 });
 
@@ -164,8 +164,8 @@ describe('bandit router', () => {
   });
 
   it('custom strategy routes with the saved weights (extreme speed wins)', () => {
-    addModel({ platform: 'google', modelId: 'smart', name: 'Smart', intelligenceRank: 1, sizeLabel: 'Frontier', budget: '~50M', priority: 1 });
-    addModel({ platform: 'groq', modelId: 'fast', name: 'Fast', intelligenceRank: 9, sizeLabel: 'Small', budget: '~50M', priority: 2 });
+    addModel({ platform: 'google', modelId: 'smart', name: 'Smart', intelligenceRank: 90, sizeLabel: 'Frontier', budget: '~50M', priority: 1 });
+    addModel({ platform: 'groq', modelId: 'fast', name: 'Fast', intelligenceRank: 10, sizeLabel: 'Small', budget: '~50M', priority: 2 });
     addHistory('google', 'smart', { successes: 40, failures: 1, outTokens: 100, latencyMs: 3000, ttfbMs: 2500 });
     addHistory('groq', 'fast', { successes: 40, failures: 1, outTokens: 1000, latencyMs: 1000, ttfbMs: 150 });
 
@@ -181,7 +181,7 @@ describe('bandit router', () => {
   });
 
   it('getRoutingScores returns a per-axis breakdown ranked by score', () => {
-    addModel({ platform: 'google', modelId: 'm1', name: 'M1', intelligenceRank: 1, sizeLabel: 'Frontier', budget: '~50M', priority: 1 });
+    addModel({ platform: 'google', modelId: 'm1', name: 'M1', intelligenceRank: 90, sizeLabel: 'Frontier', budget: '~50M', priority: 1 });
     addHistory('google', 'm1', { successes: 30, failures: 0, outTokens: 500, latencyMs: 1000, ttfbMs: 200 });
     setRoutingStrategy('balanced');
     refreshStatsCache(getDb(), true);

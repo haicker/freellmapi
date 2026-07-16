@@ -1,4 +1,6 @@
 import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   canMakeRequest,
@@ -212,7 +214,7 @@ describe('Rate Limiter', () => {
   describe('persistent state', () => {
     it('preserves per-key usage and cooldowns after the limiter module reloads', async () => {
       process.env.ENCRYPTION_KEY = '0'.repeat(64);
-      const dbPath = `/tmp/freeapi-ratelimit-${Date.now()}-${Math.random()}.db`;
+      const dbPath = path.join(os.tmpdir(), `freeapi-ratelimit-${Date.now()}-${Math.random()}.db`);
       const keyId = 4242;
       let db: { close: () => void } | undefined;
 

@@ -28,6 +28,13 @@ function insertCall(createdAt: string, clientIp: string | null, clientUserAgent:
   `).run(status, createdAt, clientIp, clientUserAgent);
 }
 
+function recentTimestamp(hoursAgo: number): string {
+  return new Date(Date.now() - hoursAgo * 60 * 60 * 1000)
+    .toISOString()
+    .replace('T', ' ')
+    .replace(/\.\d{3}Z$/, '');
+}
+
 describe('GET /api/analytics/requests', () => {
   let app: Express;
 
@@ -43,9 +50,12 @@ describe('GET /api/analytics/requests', () => {
   });
 
   it('returns one row per call, newest first, with caller identity', async () => {
-    insertCall('2026-07-06 10:00:00', '192.168.0.3', 'curl/8.6.0');
-    insertCall('2026-07-06 11:00:00', '192.168.0.15', 'python-httpx/0.27');
-    insertCall('2026-07-06 12:00:00', null, null);
+    const oldest = recentTimestamp(3);
+    const middle = recentTimestamp(2);
+    const newest = recentTimestamp(1);
+    insertCall(oldest, '192.168.0.3', 'curl/8.6.0');
+    insertCall(middle, '192.168.0.15', 'python-httpx/0.27');
+    insertCall(newest, null, null);
 
     const { status, body } = await request(app, '/api/analytics/requests?range=7d');
     expect(status).toBe(200);
@@ -62,16 +72,17 @@ describe('GET /api/analytics/requests', () => {
       clientUserAgent: 'python-httpx/0.27',
     });
     // created_at is emitted as ISO-8601 UTC so the dashboard localizes it.
-    expect(body.rows[1].createdAt).toBe('2026-07-06T11:00:00Z');
+    expect(body.rows[1].createdAt).toBe(`${middle.replace(' ', 'T')}Z`);
   });
 
   it('paginates with limit/offset and clamps limit to 500', async () => {
-    for (let i = 0; i < 5; i++) insertCall(`2026-07-06 0${i}:00:00`, '10.0.0.1', 'ua');
+    const timestamps = Array.from({ length: 5 }, (_, i) => recentTimestamp(5 - i));
+    for (const timestamp of timestamps) insertCall(timestamp, '10.0.0.1', 'ua');
 
     const page = await request(app, '/api/analytics/requests?range=7d&limit=2&offset=2');
     expect(page.body.total).toBe(5);
     expect(page.body.rows).toHaveLength(2);
-    expect(page.body.rows[0].createdAt).toBe('2026-07-06T02:00:00Z');
+    expect(page.body.rows[0].createdAt).toBe(`${timestamps[2].replace(' ', 'T')}Z`);
 
     const clamped = await request(app, '/api/analytics/requests?range=7d&limit=99999');
     expect(clamped.body.rows).toHaveLength(5);

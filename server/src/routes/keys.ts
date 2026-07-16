@@ -8,6 +8,7 @@ import { resolveProvider, getAllProviders } from '../providers/index.js';
 import { encrypt, decrypt, maskKey } from '../lib/crypto.js';
 import { parseKeysFromFile, stripJsoncComments, stripTrailingCommas } from '../lib/key-parser.js';
 import { assessProviderUrl } from '../lib/url-guard.js';
+import type { Platform } from '@freellmapi/shared/types.js';
 
 export const keysRouter = Router();
 
@@ -138,7 +139,7 @@ function noModelsNotice(platform: string): string | undefined {
 }
 
 // Auto-discover models from the provider's /v1/models endpoint and add them to the database
-async function discoverAndSaveModels(platform: string, apiKey: string, keyId: number): Promise<number> {
+async function discoverAndSaveModels(platform: Platform, apiKey: string, keyId: number): Promise<number> {
   try {
     const provider = resolveProvider(platform);
     if (!provider || !provider.getAvailableModels) {
@@ -166,7 +167,7 @@ async function discoverAndSaveModels(platform: string, apiKey: string, keyId: nu
             INSERT INTO models (platform, model_id, display_name, intelligence_rank, speed_rank, size_label,
                              rpm_limit, rpd_limit, tpm_limit, tpd_limit, context_window,
                              enabled, supports_vision, supports_tools, key_id)
-            VALUES (?, ?, ?, 10, 5, 'Medium', 60, 1000, 10000, null, 8192, 1, ?, ?, ?)
+            VALUES (?, ?, ?, 50, 5, 'Medium', 60, 1000, 10000, null, 8192, 1, ?, ?, ?)
           `).run(
             platform,
             model.id,
@@ -474,7 +475,7 @@ keysRouter.post('/', async (req: Request, res: Response) => {
 
 // Discover available models from a provider without adding them
 keysRouter.get('/:id/discover-models', async (req: Request, res: Response) => {
-  const keyId = parseInt(req.params.id, 10);
+  const keyId = parseInt(String(req.params.id), 10);
   if (isNaN(keyId)) {
     res.status(400).json({ error: { message: 'Invalid key ID' } });
     return;
@@ -497,7 +498,7 @@ keysRouter.get('/:id/discover-models', async (req: Request, res: Response) => {
     // Custom (user-supplied base_url) providers must be resolved with their
     // stored base URL, otherwise resolveProvider('custom') returns undefined
     // and discovery silently fails.
-    const provider = resolveProvider(keyRow.platform, keyRow.base_url);
+    const provider = resolveProvider(keyRow.platform as Platform, keyRow.base_url);
     if (!provider || !provider.getAvailableModels) {
       res.status(400).json({ error: { message: 'Provider does not support model discovery' } });
       return;
@@ -535,7 +536,7 @@ keysRouter.get('/:id/discover-models', async (req: Request, res: Response) => {
 
 // Add specific models to the database
 keysRouter.post('/:id/add-models', async (req: Request, res: Response) => {
-  const keyId = parseInt(req.params.id, 10);
+  const keyId = parseInt(String(req.params.id), 10);
   if (isNaN(keyId)) {
     res.status(400).json({ error: { message: 'Invalid key ID' } });
     return;
@@ -583,7 +584,7 @@ keysRouter.post('/:id/add-models', async (req: Request, res: Response) => {
       // Custom (user-supplied base_url) providers must be resolved with their
       // stored base URL, otherwise resolveProvider('custom') returns undefined
       // and discovery silently fails.
-      const provider = resolveProvider(keyRow.platform, keyRow.base_url);
+      const provider = resolveProvider(keyRow.platform as Platform, keyRow.base_url);
       if (!provider || !provider.getAvailableModels) {
         res.status(400).json({ error: { message: 'Provider does not support model discovery' } });
         return;
@@ -616,7 +617,7 @@ keysRouter.post('/:id/add-models', async (req: Request, res: Response) => {
             INSERT INTO models (platform, model_id, display_name, intelligence_rank, speed_rank, size_label,
                              rpm_limit, rpd_limit, tpm_limit, tpd_limit, context_window,
                              enabled, supports_vision, supports_tools, key_id)
-            VALUES (?, ?, ?, 10, 5, 'Medium', 60, 1000, 10000, null, 8192, 1, ?, ?, ?)
+            VALUES (?, ?, ?, 50, 5, 'Medium', 60, 1000, 10000, null, 8192, 1, ?, ?, ?)
           `).run(
             keyRow.platform,
             model.id,
@@ -781,7 +782,7 @@ keysRouter.post('/custom', async (req: Request, res: Response) => {
     const registered: { modelDbId: number; model: string; displayName: string; supportsTools: boolean; supportsVision: boolean }[] = [];
     for (const { modelId, displayName, supportsTools, supportsVision } of entries) {
       // Register each model bound to THIS endpoint's key. Custom models carry no
-      // rate limits and sort last in the intelligence preset (size_label tier).
+      // rate limits and start at the neutral intelligence score of 50.
       // Re-registering an existing model id re-binds it (model ids are unique
       // per platform, so one id can't live on two endpoints at once).
       // Capability flags: an unset flag binds NULL so COALESCE picks the insert

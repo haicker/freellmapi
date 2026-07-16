@@ -12,7 +12,6 @@ import {
   MessageSquare,
   Moon,
   Search,
-  Sparkles,
   SquareTerminal,
   Zap,
 } from 'lucide-react'

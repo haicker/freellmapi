@@ -427,7 +427,7 @@ describe('Anthropic-compatible /v1/messages', () => {
 
   it('maps a Claude family to a pinned catalog model via the settings API', async () => {
     // Pick a real enabled groq model to pin "sonnet" to.
-    const groqModel = (getDb().prepare("SELECT model_id FROM models WHERE platform = 'groq' AND enabled = 1 ORDER BY intelligence_rank LIMIT 1").get() as { model_id: string }).model_id;
+    const groqModel = (getDb().prepare("SELECT model_id FROM models WHERE platform = 'groq' AND enabled = 1 ORDER BY intelligence_rank DESC LIMIT 1").get() as { model_id: string }).model_id;
 
     const put = await send(app, 'PUT', '/api/settings/anthropic-map', { sonnet: groqModel }, { Authorization: `Bearer ${dashToken}` });
     expect(put.status).toBe(200);

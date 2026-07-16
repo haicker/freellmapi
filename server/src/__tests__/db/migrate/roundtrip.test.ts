@@ -11,6 +11,8 @@ const REQUEST_AGGREGATES_FILENAME = '20260628_120000_request_aggregates.ts';
 const GITHUB_GPT41_CONTEXT_FILENAME = '20260630_000001_github_gpt41_context.ts';
 const REQUEST_CLIENT_INFO_FILENAME = '20260706_000001_request_client_info.ts';
 const CUSTOM_MODEL_TOOL_SUPPORT_FILENAME = '20260706_000002_custom_model_tool_support.ts';
+const REMOVE_QUOTA_BUDGET_FILENAME = '20260714_000001_remove_quota_budget.ts';
+const FLIP_INTELLIGENCE_SCORE_FILENAME = '20260716_000001_flip_intelligence_score.ts';
 
 interface SchemaRow {
   type: string;
@@ -68,6 +70,8 @@ describe('migration round trip', () => {
         GITHUB_GPT41_CONTEXT_FILENAME,
         REQUEST_CLIENT_INFO_FILENAME,
         CUSTOM_MODEL_TOOL_SUPPORT_FILENAME,
+        REMOVE_QUOTA_BUDGET_FILENAME,
+        FLIP_INTELLIGENCE_SCORE_FILENAME,
       ]);
     } finally {
       db.close();

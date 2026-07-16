@@ -115,7 +115,7 @@ describe('Custom Provider Endpoints', () => {
 
   it('surfaces baseUrl in the keys listing', async () => {
     const { body } = await get(app, '/api/keys');
-    const custom = body.find((k: any) => k.platform === 'custom');
+    const custom = body.keys.find((k: any) => k.platform === 'custom');
     expect(custom.baseUrl).toBe('http://127.0.0.1:11434/v1');
   });
 
@@ -352,9 +352,10 @@ describe('Custom Provider Endpoints', () => {
       expect(body.models[0].model).toBe('dupe:1');
     });
 
-    it('rejects a submit with neither model nor models', async () => {
-      const { status } = await post(app, '/api/keys/custom', { baseUrl: 'http://127.0.0.1:9999/v1' });
-      expect(status).toBe(400);
+    it('registers an endpoint without models for later discovery', async () => {
+      const { status, body } = await post(app, '/api/keys/custom', { baseUrl: 'http://127.0.0.1:9999/v1' });
+      expect(status).toBe(201);
+      expect(body.models).toEqual([]);
     });
   });
 

@@ -6,12 +6,22 @@ import { mintDashboardToken, isGatedApiPath } from '../helpers/auth.js';
 import { isFusionModel, fusionConfigSchema, familyKey, diversifyChain } from '../../services/fusion.js';
 import { getOrderedFusionChain, setRoutingStrategy, getRoutingStrategy, type FusionCandidate } from '../../services/router.js';
 import { setCooldown } from '../../services/ratelimit.js';
+import { encrypt } from '../../lib/crypto.js';
 
 let dashToken = '';
 
 // Platforms registered `keyless: true` — they route WITHOUT an api_keys row
 // (see providers/index.ts, providers/aihorde.ts and router.selectKeyForModel).
 const KEYLESS_PLATFORMS = new Set(['kilo', 'pollinations', 'ovh', 'aihorde']);
+
+function insertTestKey(platform: string, value = `k_${platform}_fusion`): number {
+  const key = encrypt(value);
+  const result = getDb().prepare(
+    `INSERT INTO api_keys (platform, label, encrypted_key, iv, auth_tag, status, enabled)
+     VALUES (?, 'fusion-test', ?, ?, ?, 'healthy', 1)`,
+  ).run(platform, key.encrypted, key.iv, key.authTag);
+  return Number(result.lastInsertRowid);
+}
 
 async function request(app: Express, method: string, path: string, body?: any, headers: Record<string, string> = {}) {
   const server = app.listen(0);
@@ -163,8 +173,7 @@ describe('fusion route (/v1/chat/completions, model: "fusion")', () => {
     // keyless panel membership re-enables them inline (no network call there).
     db.prepare("UPDATE models SET enabled = 0 WHERE platform IN ('kilo','pollinations','ovh','aihorde')").run();
     for (const platform of ['groq', 'cerebras', 'openrouter']) {
-      const r = await request(app, 'POST', '/api/keys', { platform, key: `k_${platform}_fusion`, label: 'fusion-test' });
-      expect(r.status).toBe(201);
+      insertTestKey(platform);
     }
   });
 
@@ -432,8 +441,7 @@ describe('fusion route (/v1/chat/completions, model: "fusion")', () => {
     db.prepare("UPDATE models SET enabled = 1 WHERE platform IN ('kilo','pollinations','ovh','aihorde')").run();
     // Strip every key, then configure ONLY groq — no cerebras/openrouter/etc.
     db.prepare('DELETE FROM api_keys').run();
-    const r = await request(app, 'POST', '/api/keys', { platform: 'groq', key: 'k_groq_only', label: 'only-groq' });
-    expect(r.status).toBe(201);
+    insertTestKey('groq', 'k_groq_only');
 
     const candidates = getOrderedFusionChain();
     expect(candidates.length).toBeGreaterThan(0);
@@ -447,8 +455,7 @@ describe('fusion route (/v1/chat/completions, model: "fusion")', () => {
   it('auto-panel excludes a model whose only key is on cooldown', async () => {
     const db = getDb();
     db.prepare('DELETE FROM api_keys').run();
-    await request(app, 'POST', '/api/keys', { platform: 'groq', key: 'k_groq_cool', label: 'cool' });
-    const keyId = (db.prepare("SELECT id FROM api_keys WHERE platform = 'groq'").get() as { id: number }).id;
+    const keyId = insertTestKey('groq', 'k_groq_cool');
 
     const before = getOrderedFusionChain().filter(c => c.platform === 'groq');
     expect(before.length).toBeGreaterThan(0);

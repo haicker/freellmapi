@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import type { Express } from 'express';
 import { createApp } from '../../app.js';
 import { initDb, getDb } from '../../db/index.js';
 import { mintDashboardToken, isGatedApiPath } from '../helpers/auth.js';
+import { getAllProviders } from '../../providers/index.js';
 
 let dashToken = '';
 
@@ -67,6 +68,12 @@ describe('Keys API', () => {
   });
 
   beforeEach(() => {
+    vi.restoreAllMocks();
+    for (const provider of getAllProviders()) {
+      if (provider.getAvailableModels) {
+        vi.spyOn(provider, 'getAvailableModels').mockResolvedValue([]);
+      }
+    }
     const db = getDb();
     db.prepare('DELETE FROM api_keys').run();
   });
@@ -74,7 +81,8 @@ describe('Keys API', () => {
   it('GET /api/keys returns empty array initially', async () => {
     const { status, body } = await request(app, 'GET', '/api/keys');
     expect(status).toBe(200);
-    expect(body).toEqual([]);
+    expect(body.keys).toEqual([]);
+    expect(body.platformModels).toBeTypeOf('object');
   });
 
   it('POST /api/keys creates a new key', async () => {
@@ -99,8 +107,8 @@ describe('Keys API', () => {
 
     const { status, body } = await request(app, 'GET', '/api/keys');
     expect(status).toBe(200);
-    expect(body).toHaveLength(1);
-    expect(body[0].platform).toBe('groq');
+    expect(body.keys).toHaveLength(1);
+    expect(body.keys[0].platform).toBe('groq');
   });
 
   it('POST /api/keys warns when the platform has no catalog models yet (#438)', async () => {
@@ -117,7 +125,7 @@ describe('Keys API', () => {
     expect(status).toBe(201);
     expect(body.modelsAvailable).toBe(0);
     expect(body.notice).toBeTruthy();
-    expect(body.notice).toMatch(/no agnes models/i);
+    expect(body.notice).toMatch(/no models are available for agnes/i);
   });
 
   it('POST /api/keys does not warn when the platform has catalog models', async () => {
@@ -155,7 +163,7 @@ describe('Keys API', () => {
     expect(status).toBe(200);
 
     const { body: after } = await request(app, 'GET', '/api/keys');
-    expect(after).toHaveLength(0);
+    expect(after.keys).toHaveLength(0);
   });
 
   it('DELETE /api/keys/:id returns 404 for nonexistent key', async () => {
@@ -178,7 +186,7 @@ describe('Keys API', () => {
     expect(body.label).toBe('Production key');
 
     const { body: keys } = await request(app, 'GET', '/api/keys');
-    expect(keys[0].label).toBe('Production key');
+    expect(keys.keys[0].label).toBe('Production key');
   });
 
   it('PATCH /api/keys/:id updates both enabled and label', async () => {
@@ -198,8 +206,8 @@ describe('Keys API', () => {
     expect(body.label).toBe('Disabled key');
 
     const { body: keys } = await request(app, 'GET', '/api/keys');
-    expect(keys[0].enabled).toBe(false);
-    expect(keys[0].label).toBe('Disabled key');
+    expect(keys.keys[0].enabled).toBe(false);
+    expect(keys.keys[0].label).toBe('Disabled key');
   });
 
   it('PATCH /api/keys/:id clears label', async () => {
@@ -218,7 +226,7 @@ describe('Keys API', () => {
     expect(body.label).toBe('');
 
     const { body: keys } = await request(app, 'GET', '/api/keys');
-    expect(keys[0].label).toBe('');
+    expect(keys.keys[0].label).toBe('');
   });
 
   it('PATCH /api/keys/:id returns 400 when no fields provided', async () => {
@@ -265,7 +273,7 @@ describe('Keys API', () => {
       expect(body).toMatchObject({ imported: 2, skipped: [], errors: [], total: 2 });
 
       const { body: keys } = await request(app, 'GET', '/api/keys');
-      expect(keys.map((key: any) => key.platform).sort()).toEqual(['groq', 'mistral']);
+      expect(keys.keys.map((key: any) => key.platform).sort()).toEqual(['groq', 'mistral']);
     });
 
     it('auto-imports recognized keys from one file and skips unknown providers', async () => {
@@ -278,8 +286,8 @@ describe('Keys API', () => {
       expect(body.skipped).toContain('ANTHROPIC_API_KEY');
 
       const { body: keys } = await request(app, 'GET', '/api/keys');
-      expect(keys).toHaveLength(1);
-      expect(keys[0].platform).toBe('groq');
+      expect(keys.keys).toHaveLength(1);
+      expect(keys.keys[0].platform).toBe('groq');
     });
 
     it('rejects unsupported files and malformed JSON uploads', async () => {

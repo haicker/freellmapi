@@ -143,7 +143,7 @@ describe('Full Integration Flow', () => {
       platform: 'groq', key: 'gsk_delete_test', label: 'delete-test',
     });
     const { body: keys } = await req(app, 'GET', '/api/keys');
-    const target = keys.find((k: any) => k.label === 'delete-test');
+    const target = keys.keys.find((k: any) => k.label === 'delete-test');
     expect(target).toBeDefined();
 
     const { status } = await req(app, 'DELETE', `/api/keys/${target.id}`);

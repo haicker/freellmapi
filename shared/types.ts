@@ -183,6 +183,20 @@ export interface ApiKeyCreate {
   label?: string;
 }
 
+export interface ProviderQuotaState {
+  platform: string;
+  keyId: number;
+  quotaPoolKey: string;
+  metric: string;
+  source: string;
+  confidence: number;
+  limit: number | null;
+  remaining: number | null;
+  resetAt: string | null;
+  observedAt: string;
+  notes: string | null;
+}
+
 // ---- Fallback Config ----
 
 export interface FallbackEntry {

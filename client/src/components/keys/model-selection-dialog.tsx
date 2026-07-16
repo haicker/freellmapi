@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Dialog, DialogClose, DialogPopup, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,12 @@ interface Model {
   supportsVision?: boolean
 }
 
+interface DiscoverModelsResponse {
+  platform: string
+  totalModels: number
+  availableModels: Model[]
+}
+
 interface ModelSelectionDialogProps {
   keyData: ApiKey
   open: boolean
@@ -26,9 +32,9 @@ export function ModelSelectionDialog({ keyData, open, onOpenChange }: ModelSelec
   const [selectedModels, setSelectedModels] = useState<string[]>([])
 
   // Fetch available models
-  const { data: modelsData, isLoading: modelsLoading, error: modelsError } = useQuery({
+  const { data: modelsData, isLoading: modelsLoading, error: modelsError } = useQuery<DiscoverModelsResponse>({
     queryKey: ['discover-models', keyData.id],
-    queryFn: () => apiFetch(`/api/keys/${keyData.id}/discover-models`),
+    queryFn: () => apiFetch<DiscoverModelsResponse>(`/api/keys/${keyData.id}/discover-models`),
     enabled: open && keyData.platform !== 'aihorde',
   })
 

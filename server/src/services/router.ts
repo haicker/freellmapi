@@ -1037,7 +1037,17 @@ export function resolveFusionCandidate(modelId: string): FusionCandidate | null 
   return null;
 }
 
-export function routeRequest(estimatedTokens = 1000, skipKeys?: Set<string>, preferredModelDbId?: number, requireVision = false, requireTools = false, skipModels?: Set<number>, prefetchedChain?: ChainRow[], requireStructured = false): RouteResult {
+export function routeRequest(
+  estimatedTokens = 1000,
+  skipKeys?: Set<string>,
+  preferredModelDbId?: number,
+  requireVision = false,
+  requireTools = false,
+  skipModels?: Set<number>,
+  prefetchedChain?: ChainRow[],
+  requireStructured = false,
+  allowKeylessWithoutOptIn = false,
+): RouteResult {
   const db = getDb();
 
   const strategy = getRoutingStrategy();
@@ -1131,7 +1141,7 @@ export function routeRequest(estimatedTokens = 1000, skipKeys?: Set<string>, pre
     // first usable key's RouteResult, or null when the model has no key that
     // can serve right now — in which case we fall through to the next model in
     // the sorted chain for THIS request (no explicit penalty needed).
-    const route = selectKeyForModel(entry, estimatedTokens, skipKeys, diag, entry.model_db_id === preferredModelDbId);
+    const route = selectKeyForModel(entry, estimatedTokens, skipKeys, diag, allowKeylessWithoutOptIn);
     if (route) return route;
   }
 

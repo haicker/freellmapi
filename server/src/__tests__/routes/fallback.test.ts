@@ -247,39 +247,36 @@ describe('Fallback API', () => {
     await request(app, 'PUT', '/api/fallback', restore);
   });
 
-  it('POST /api/fallback/sort/intelligence sorts by cross-provider tier, then rank', async () => {
+  it('POST /api/fallback/sort/intelligence sorts by intelligence score descending', async () => {
     const { status } = await request(app, 'POST', '/api/fallback/sort/intelligence');
     expect(status).toBe(200);
 
     const { body } = await request(app, 'GET', '/api/fallback');
 
-    // intelligence_rank is per-provider, so the sort normalizes on the
-    // cross-provider capability tier (size_label) first (issue #135).
-    const tier: Record<string, number> = { Frontier: 1, Large: 2, Medium: 3, Small: 4 };
-    const tierOf = (label: string) => tier[label] ?? 5;
-
     for (let i = 1; i < body.length; i++) {
-      const prevTier = tierOf(body[i - 1].sizeLabel);
-      const curTier = tierOf(body[i].sizeLabel);
-      // Capability tier never decreases...
-      expect(curTier).toBeGreaterThanOrEqual(prevTier);
-      // ...and within the same tier, per-provider rank breaks the tie.
-      if (curTier === prevTier) {
-        expect(body[i].intelligenceRank).toBeGreaterThanOrEqual(body[i - 1].intelligenceRank);
-      }
+      expect(body[i].intelligenceRank).toBeLessThanOrEqual(body[i - 1].intelligenceRank);
     }
   });
 
-  it('intelligence sort never places a weaker tier above a Frontier model (#135)', async () => {
-    await request(app, 'POST', '/api/fallback/sort/intelligence');
-    const { body } = await request(app, 'GET', '/api/fallback');
+  it('intelligence score overrides the display-only size tier', async () => {
+    const db = getDb();
+    const frontier = db.prepare(
+      "SELECT id, intelligence_rank FROM models WHERE size_label = 'Frontier' LIMIT 1",
+    ).get() as { id: number; intelligence_rank: number };
+    const small = db.prepare(
+      "SELECT id, intelligence_rank FROM models WHERE size_label = 'Small' LIMIT 1",
+    ).get() as { id: number; intelligence_rank: number };
 
-    // The last Frontier model must come before the first non-Frontier model —
-    // i.e. no "Intel #1 from a weaker provider" leaks above the frontier tier.
-    const lastFrontier = body.map((m: any) => m.sizeLabel).lastIndexOf('Frontier');
-    const firstNonFrontier = body.findIndex((m: any) => m.sizeLabel !== 'Frontier');
-    if (lastFrontier !== -1 && firstNonFrontier !== -1) {
-      expect(lastFrontier).toBeLessThan(firstNonFrontier);
+    try {
+      db.prepare('UPDATE models SET intelligence_rank = 10 WHERE id = ?').run(frontier.id);
+      db.prepare('UPDATE models SET intelligence_rank = 90 WHERE id = ?').run(small.id);
+      await request(app, 'POST', '/api/fallback/sort/intelligence');
+      const { body } = await request(app, 'GET', '/api/fallback');
+      expect(body.findIndex((m: any) => m.modelDbId === small.id))
+        .toBeLessThan(body.findIndex((m: any) => m.modelDbId === frontier.id));
+    } finally {
+      db.prepare('UPDATE models SET intelligence_rank = ? WHERE id = ?').run(frontier.intelligence_rank, frontier.id);
+      db.prepare('UPDATE models SET intelligence_rank = ? WHERE id = ?').run(small.intelligence_rank, small.id);
     }
   });
 

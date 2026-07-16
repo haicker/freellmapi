@@ -61,11 +61,15 @@ export function CustomProviderSection({ onAdded }: { onAdded?: () => void } = {}
     queryFn: () => apiFetch('/api/embeddings'),
   })
 
-  const addCustom = useMutation({
+  const addCustom = useMutation<
+    { models?: unknown[] },
+    Error,
+    { path: string; body: Record<string, unknown> }
+  >({
     meta: { silenceToast: true },
     mutationFn: ({ path, body }: { path: string; body: Record<string, unknown> }) =>
-      apiFetch(path, { method: 'POST', body: JSON.stringify(body) }),
-    onSuccess: (data: { models?: unknown[] }) => {
+      apiFetch<{ models?: unknown[] }>(path, { method: 'POST', body: JSON.stringify(body) }),
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['keys'] })
       queryClient.invalidateQueries({ queryKey: ['health'] })
       queryClient.invalidateQueries({ queryKey: ['fallback'] })

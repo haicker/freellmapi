@@ -28,7 +28,7 @@ describe('Router', () => {
     // see the dedicated keyless test below).
     db.prepare("UPDATE models SET enabled = 0 WHERE platform IN ('kilo','pollinations','ovh','aihorde')").run();
     // Reset fallback order to intelligence ranking
-    const models = db.prepare('SELECT id, intelligence_rank FROM models ORDER BY intelligence_rank ASC').all() as any[];
+    const models = db.prepare('SELECT id, intelligence_rank FROM models ORDER BY intelligence_rank DESC').all() as any[];
     const update = db.prepare('UPDATE fallback_config SET priority = ? WHERE model_db_id = ?');
     for (let i = 0; i < models.length; i++) {
       update.run(i + 1, models[i].id);
@@ -277,10 +277,23 @@ describe('Router', () => {
     ).get() as { id: number } | undefined;
     expect(kilo).toBeDefined();
 
-    const result = routeRequest(1000, undefined, kilo!.id);
+    const result = routeRequest(1000, undefined, kilo!.id, false, false, undefined, undefined, false, true);
     expect(result.platform).toBe('kilo');
     expect(result.apiKey).toBe('no-key');
     expect(result.keyId).toBe(-1);
+  });
+
+  it('does not treat a sticky/preferred keyless model as an explicit pin', () => {
+    const db = getDb();
+    db.prepare('DELETE FROM api_keys').run();
+    db.prepare("UPDATE models SET enabled = 0 WHERE platform NOT IN ('kilo')").run();
+    db.prepare("UPDATE models SET enabled = 1 WHERE platform = 'kilo'").run();
+    const kilo = db.prepare(
+      "SELECT id FROM models WHERE platform = 'kilo' AND enabled = 1 LIMIT 1"
+    ).get() as { id: number } | undefined;
+    expect(kilo).toBeDefined();
+
+    expect(() => routeRequest(1000, undefined, kilo!.id)).toThrow(/exhausted/i);
   });
 });
 

@@ -13,12 +13,9 @@ COPY . .
 # Install all dependencies
 RUN npm ci
 
-# Build server: tsc emits JS even with type errors (noEmitOnError defaults to false)
-# || true allows the build to continue despite pre-existing type errors
-RUN npm run build -w server || true
-
-# Build client: vite needs to run from client/ dir where index.html lives
-RUN cd client && npx vite build
+# Build both workspaces. A compile failure must stop the image build so a broken
+# server cannot be published as `latest`.
+RUN npm run build
 
 # Remove dev dependencies to slim down the image
 RUN npm prune --omit=dev

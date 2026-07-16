@@ -168,18 +168,12 @@ fallbackRouter.put('/', (req: Request, res: Response) => {
   res.json({ success: true });
 });
 
-// `intelligence_rank` is scoped to each provider's own catalog — a provider's
-// #1 model is not globally #1 (see issue #135: MiniMax's top model outranking
-// Gemini Pro because both read "Intel #1"). `size_label` IS a cross-provider
-// capability tier, so normalize on it first and use intelligence_rank only as
-// an in-tier tiebreaker. Unknown labels sort last.
-const INTELLIGENCE_TIER =
-  "CASE m.size_label WHEN 'Frontier' THEN 1 WHEN 'Large' THEN 2 WHEN 'Medium' THEN 3 WHEN 'Small' THEN 4 ELSE 5 END";
-
+// Intelligence is a direct 1-100 score shared across providers. Higher values
+// are smarter, so the preset sorts descending without a size-tier override.
 // Sort presets — `orderBy` is selected from a fixed whitelist, never from
 // user input directly, so the interpolation below is safe.
 const SORT_PRESETS: Record<string, string> = {
-  intelligence: `${INTELLIGENCE_TIER} ASC, m.intelligence_rank ASC`,
+  intelligence: 'm.intelligence_rank DESC',
   speed: 'm.speed_rank ASC',
 };
 

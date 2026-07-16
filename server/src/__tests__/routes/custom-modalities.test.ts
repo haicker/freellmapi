@@ -189,7 +189,7 @@ describe('custom provider modalities', () => {
 
     const keys = await get(app, '/api/keys');
     expect(keys.status).toBe(200);
-    const custom = keys.body.find((k: any) => k.platform === 'custom' && k.baseUrl === 'http://127.0.0.1:8585/v1');
+    const custom = keys.body.keys.find((k: any) => k.platform === 'custom' && k.baseUrl === 'http://127.0.0.1:8585/v1');
     expect(custom.label).toBe('Local endpoint');
     expect(custom.models.map((m: any) => `${m.kind}:${m.modelId}`).sort()).toEqual([
       'audio:local-audio',
@@ -221,20 +221,20 @@ describe('custom provider modalities', () => {
     })).status).toBe(201);
 
     const before = await get(app, '/api/keys');
-    const key = before.body.find((k: any) => k.platform === 'custom' && k.baseUrl === 'http://127.0.0.1:8686/v1');
+    const key = before.body.keys.find((k: any) => k.platform === 'custom' && k.baseUrl === 'http://127.0.0.1:8686/v1');
     const chat = key.models.find((m: any) => m.kind === 'chat');
     const embedding = key.models.find((m: any) => m.kind === 'embedding');
     const image = key.models.find((m: any) => m.kind === 'image');
 
     expect((await del(app, `/api/models/custom/${chat.id}`)).status).toBe(200);
     const afterChatDelete = await get(app, '/api/keys');
-    const stillPresent = afterChatDelete.body.find((k: any) => k.id === key.id);
+    const stillPresent = afterChatDelete.body.keys.find((k: any) => k.id === key.id);
     expect(stillPresent.models.map((m: any) => m.kind).sort()).toEqual(['embedding', 'image']);
 
     expect((await del(app, `/api/embeddings/custom/${embedding.id}`)).status).toBe(200);
     expect((await del(app, `/api/media/custom/${image.id}`)).status).toBe(200);
     const afterAllDeleted = await get(app, '/api/keys');
-    expect(afterAllDeleted.body.find((k: any) => k.id === key.id)).toBeUndefined();
+    expect(afterAllDeleted.body.keys.find((k: any) => k.id === key.id)).toBeUndefined();
   });
 
   it('deleting a custom endpoint key removes bound embedding and media models', async () => {

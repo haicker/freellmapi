@@ -77,7 +77,7 @@ function main() {
               rpm_limit, rpd_limit, tpm_limit, tpd_limit, context_window,
               enabled, supports_vision, supports_tools
          FROM models
-        ORDER BY intelligence_rank ASC, platform ASC, model_id ASC`,
+        ORDER BY intelligence_rank DESC, platform ASC, model_id ASC`,
     )
     .all() as ModelRow[];
 
