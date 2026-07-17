@@ -224,6 +224,7 @@
     "addingCustom": "Aggiunta…",
     "getApiKey": "Ottieni chiave API",
     "deleteKeyConfirm": "Eliminare questa chiave? Non è possibile annullare.",
+    "deleteAllModels": "Elimina tutti i modelli",
     "checkAll": "Controlla tutto",
     "checking": "Controllo…",
     "editLabel": "Modifica etichetta",

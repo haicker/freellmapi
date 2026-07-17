@@ -80,6 +80,12 @@ export function customModelDeletePath(model: ApiKeyModel): string {
   return `/api/media/custom/${model.id}`
 }
 
+export function platformModelDeletePath(model: ApiKeyModel): string {
+  if (model.kind === 'chat') return `/api/models/${model.id}`
+  if (model.kind === 'embedding') return `/api/embeddings/${model.id}`
+  return `/api/media/${model.id}`
+}
+
 export const statusDot: Record<string, string> = {
   healthy: 'bg-emerald-500',
   rate_limited: 'bg-amber-500',

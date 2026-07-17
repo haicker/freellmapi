@@ -224,6 +224,7 @@
     "addingCustom": "Ajout…",
     "getApiKey": "Obtenir une clé API",
     "deleteKeyConfirm": "Supprimer cette clé ? Cette action est irréversible.",
+    "deleteAllModels": "Supprimer tous les modèles",
     "checkAll": "Tout vérifier",
     "checking": "Vérification…",
     "editLabel": "Modifier le libellé",

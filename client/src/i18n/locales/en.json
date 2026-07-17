@@ -270,6 +270,7 @@
     "addingCustom": "Adding…",
     "getApiKey": "Get API key",
     "deleteKeyConfirm": "Delete this key? This cannot be undone.",
+    "deleteAllModels": "Delete all models",
     "checkAll": "Check all",
     "checking": "Checking…",
     "editLabel": "Edit label",

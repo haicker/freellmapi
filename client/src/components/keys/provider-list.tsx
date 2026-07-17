@@ -27,6 +27,7 @@ import {
   CUSTOM_MODEL_KIND_LABEL,
   customModelDeleteKey,
   customModelDeletePath,
+  platformModelDeletePath,
   statusDot,
   statusLabelKey,
 } from './shared'
@@ -84,6 +85,30 @@ export function ProviderList({ onAddKey }: { onAddKey: () => void }) {
 
   const deleteCustomModel = useMutation({
     mutationFn: (model: ApiKeyModel) => apiFetch(customModelDeletePath(model), { method: 'DELETE' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['keys'] })
+      queryClient.invalidateQueries({ queryKey: ['health'] })
+      queryClient.invalidateQueries({ queryKey: ['fallback'] })
+      queryClient.invalidateQueries({ queryKey: ['models'] })
+      queryClient.invalidateQueries({ queryKey: ['embeddings'] })
+      queryClient.invalidateQueries({ queryKey: ['media'] })
+    },
+  })
+
+  const deletePlatformModel = useMutation({
+    mutationFn: (model: ApiKeyModel) => apiFetch(platformModelDeletePath(model), { method: 'DELETE' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['keys'] })
+      queryClient.invalidateQueries({ queryKey: ['health'] })
+      queryClient.invalidateQueries({ queryKey: ['fallback'] })
+      queryClient.invalidateQueries({ queryKey: ['models'] })
+      queryClient.invalidateQueries({ queryKey: ['embeddings'] })
+      queryClient.invalidateQueries({ queryKey: ['media'] })
+    },
+  })
+
+  const deleteAllPlatformModels = useMutation({
+    mutationFn: (models: ApiKeyModel[]) => Promise.allSettled(models.map(m => apiFetch(platformModelDeletePath(m), { method: 'DELETE' }))),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['keys'] })
       queryClient.invalidateQueries({ queryKey: ['health'] })
@@ -369,25 +394,53 @@ export function ProviderList({ onAddKey }: { onAddKey: () => void }) {
                           {t('keys.modelsCount', { count: platformModels[group.value].length })}
                         </button>
                         {expandedModelGroups.has(group.value) && (
-                          <div className="flex flex-wrap gap-2 mt-2 px-3 py-2 rounded-xl bg-muted/20 border">
-                            {platformModels[group.value].map(model => {
-                              const key = `${model.id}-${model.kind}`
-                              return (
-                                <div key={key} className="inline-flex min-w-0 items-center gap-2 rounded-md border bg-background px-2 py-1 text-[11px]">
-                                  <span className="rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                                    {t(CUSTOM_MODEL_KIND_LABEL[model.kind])}
-                                  </span>
-                                  <span className="max-w-[180px] truncate font-medium" title={model.modelId}>
-                                    {model.displayName}
-                                  </span>
-                                  {model.family && (
-                                    <code className="max-w-[160px] truncate text-muted-foreground" title={model.family}>
-                                      {model.family}
-                                    </code>
-                                  )}
-                                </div>
-                              )
-                            })}
+                          <div className="mt-2 px-3 py-2 rounded-xl bg-muted/20 border">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-[11px] text-muted-foreground">
+                                {t('keys.modelsCount', { count: platformModels[group.value].length })}
+                              </span>
+                              <ConfirmButton
+                                className="h-6 px-2 text-[11px] text-muted-foreground hover:text-destructive"
+                                armedSize="xs"
+                                confirmLabel={t('common.confirm')}
+                                disabled={deleteAllPlatformModels.isPending}
+                                onConfirm={() => deleteAllPlatformModels.mutate(platformModels[group.value])}
+                                title={t('keys.deleteAllModels')}
+                                aria-label={t('keys.deleteAllModels')}
+                              >
+                                <Trash2 className="size-3" />
+                                <span className="ml-1">{t('common.delete')}</span>
+                              </ConfirmButton>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {platformModels[group.value].map(model => {
+                                const key = `${model.id}-${model.kind}`
+                                return (
+                                  <div key={key} className="inline-flex min-w-0 items-center gap-2 rounded-md border bg-background px-2 py-1 text-[11px]">
+                                    <span className="rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                                      {t(CUSTOM_MODEL_KIND_LABEL[model.kind])}
+                                    </span>
+                                    <span className="max-w-[180px] truncate font-medium" title={model.modelId}>
+                                      {model.displayName}
+                                    </span>
+                                    {model.family && (
+                                      <code className="max-w-[160px] truncate text-muted-foreground" title={model.family}>
+                                        {model.family}
+                                      </code>
+                                    )}
+                                    <ConfirmButton
+                                      className="h-5 px-1 text-muted-foreground hover:text-destructive"
+                                      disabled={deletePlatformModel.isPending || deleteAllPlatformModels.isPending}
+                                      onConfirm={() => deletePlatformModel.mutate(model)}
+                                      title={t('common.remove')}
+                                      aria-label={t('common.remove')}
+                                    >
+                                      <Trash2 className="size-3" />
+                                    </ConfirmButton>
+                                  </div>
+                                )
+                              })}
+                            </div>
                           </div>
                         )}
                       </div>

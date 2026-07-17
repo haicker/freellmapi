@@ -258,6 +258,34 @@ embeddingsRouter.put('/', (req: Request, res: Response) => {
   res.json({ success: true });
 });
 
+// DELETE /api/embeddings/:id — delete any embedding model (custom or platform).
+// Used by the Keys page to remove platform-level models from a provider group.
+embeddingsRouter.delete('/:id', (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: { message: 'Invalid id' } });
+    return;
+  }
+
+  const db = getDb();
+  const row = db.prepare("SELECT family, key_id, platform FROM embedding_models WHERE id = ?").get(id) as { family: string; key_id: number | null; platform: string } | undefined;
+  if (!row) {
+    res.status(404).json({ error: { message: `Unknown embedding model ${id}` } });
+    return;
+  }
+
+  const remove = db.transaction(() => {
+    db.prepare("DELETE FROM embedding_models WHERE id = ?").run(id);
+    if (row.platform === 'custom') deleteUnusedCustomEndpointKey(db, row.key_id);
+  });
+  remove();
+  if (getDefaultFamily() === row.family) {
+    const replacement = db.prepare('SELECT family FROM embedding_models ORDER BY family, priority LIMIT 1').get() as { family: string } | undefined;
+    if (replacement) setSetting('embeddings_default_family', replacement.family);
+  }
+  res.json({ success: true });
+});
+
 embeddingsRouter.delete('/custom/:id', (req: Request, res: Response) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {

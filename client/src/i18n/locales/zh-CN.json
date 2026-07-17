@@ -224,6 +224,7 @@
     "addingCustom": "添加中…",
     "getApiKey": "获取 API 密钥",
     "deleteKeyConfirm": "确认删除此密钥?此操作无法撤销。",
+    "deleteAllModels": "删除全部模型",
     "checkAll": "全部检查",
     "checking": "检查中…",
     "editLabel": "编辑标签",

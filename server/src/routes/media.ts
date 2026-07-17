@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { getDb } from '../db/index.js';
 import { encrypt, decrypt, maskKey } from '../lib/crypto.js';
 import { deleteUnusedCustomEndpointKey } from '../lib/custom-provider-cleanup.js';
+import { isCatalogManagedModel, recordCatalogModelTombstone } from '../services/model-state.js';
 import { listAllMediaModels } from '../services/media.js';
 
 export const mediaRouter = Router();
@@ -181,6 +182,33 @@ mediaRouter.put('/:id', (req: Request, res: Response) => {
     return;
   }
   res.json({ success: true });
+});
+
+// DELETE /api/media/:id — delete any media model (custom or platform).
+// Used by the Keys page to remove platform-level models from a provider group.
+mediaRouter.delete('/:id', (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: { message: 'Invalid id' } });
+    return;
+  }
+
+  const db = getDb();
+  const row = db.prepare("SELECT key_id, platform, model_id FROM media_models WHERE id = ?").get(id) as { key_id: number | null; platform: string; model_id: string } | undefined;
+  if (!row) {
+    res.status(404).json({ error: { message: `Unknown media model ${id}` } });
+    return;
+  }
+
+  const remove = db.transaction(() => {
+    if (isCatalogManagedModel(row)) {
+      recordCatalogModelTombstone(db, 'media', row.platform, row.model_id);
+    }
+    db.prepare("DELETE FROM media_models WHERE id = ?").run(id);
+    if (row.platform === 'custom') deleteUnusedCustomEndpointKey(db, row.key_id);
+  });
+  remove();
+  res.json({ success: true, tombstoned: isCatalogManagedModel(row) });
 });
 
 mediaRouter.delete('/custom/:id', (req: Request, res: Response) => {
