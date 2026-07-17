@@ -112,7 +112,6 @@ export const platformColors: Record<string, string> = {
   zhipu:       '#06b6d4',
   ollama:      '#000000',
   kilo:        '#7c3aed',
-  pollinations: '#a855f7',
   llm7:        '#0ea5e9',
   huggingface: '#ff9d00',
   routeway:    '#14b8a6',

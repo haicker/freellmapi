@@ -53,7 +53,6 @@ export type Platform =
   | 'zhipu'
   | 'ollama'
   | 'kilo'
-  | 'pollinations'
   | 'llm7'
   | 'huggingface'
   // OpenCode Zen — OpenAI-compatible gateway. Free promotional models require a

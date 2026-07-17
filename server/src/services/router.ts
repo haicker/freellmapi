@@ -718,7 +718,7 @@ function selectRealKeyForModel(
  * Pick a usable key for ONE model and build its RouteResult, or return null if
  * the model has no key that can serve the request right now.
  *
- * KEYLESS PROVIDERS (kilo / pollinations / ovh / aihorde) need no API key and
+ * KEYLESS PROVIDERS (kilo / ovh / aihorde) need no API key and
  * route out of the box — see selectKeyForModel below — so this only does key
  * selection + accounting pre-checks for keyed models.
  */

@@ -319,7 +319,7 @@ export const MODEL_FORBIDDEN_COOLDOWN_MS = DAY;
 
 // When RPD/TPD limits are NULL (provider's published daily quota is unknown or
 // not yet seeded — common for ollama, cloudflare, nvidia, huggingface, mistral,
-// kilo, llm7, pollinations), we cannot check a counter against a cap. Fall back
+// kilo, llm7), we cannot check a counter against a cap. Fall back
 // to a hit-count heuristic: after 2+ 429s within this rolling window, treat as
 // "effectively daily-exhausted" and enter the standard escalation ladder at
 // the same step the documented-RPD path would. Without this, these providers

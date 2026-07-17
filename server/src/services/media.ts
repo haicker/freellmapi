@@ -12,10 +12,7 @@ import { decrypt } from '../lib/crypto.js';
 import { proxyFetch } from '../lib/proxy.js';
 
 /** Platforms with a media adapter below. */
-export const MEDIA_PLATFORMS = new Set(['nvidia', 'pollinations', 'cloudflare', 'siliconflow', 'google']);
-
-/** Platforms whose free media path needs no API key (anonymous). */
-const KEYLESS_CAPABLE = new Set(['pollinations']);
+export const MEDIA_PLATFORMS = new Set(['nvidia', 'cloudflare', 'siliconflow', 'google']);
 
 export type MediaModality = 'image' | 'audio';
 
@@ -216,13 +213,6 @@ async function callImageProvider(
       const j = (await r.json()) as { artifacts?: { base64?: string }[] };
       return (j.artifacts ?? []).map(a => ({ b64_json: a.base64 }));
     }
-    case 'pollinations': {
-      // Keyless GET image endpoint returns raw image bytes.
-      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(p.prompt)}?width=${w}&height=${h}&nologo=true&model=${encodeURIComponent(row.model_id)}`;
-      const r = await mediaFetch(url, 'pollinations', 'image', { method: 'GET' });
-      const buf = Buffer.from(await r.arrayBuffer());
-      return [{ b64_json: buf.toString('base64') }];
-    }
     case 'cloudflare': {
       const { accountId, token } = parseCfKey(key);
       const r = await mediaFetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${row.model_id}`, 'cloudflare', 'image', {
@@ -299,25 +289,6 @@ async function callSpeechProvider(
       });
       return { audio: Buffer.from(await r.arrayBuffer()), contentType: contentTypeFor(fmt) };
     }
-    case 'pollinations': {
-      // OpenAI-shaped chat-completions with the audio modality returns b64 audio.
-      // The anonymous tier needs no key; only send one when it's a real sk_ token.
-      const realKey = key && key.startsWith('sk_') ? key : null;
-      const r = await mediaFetch('https://gen.pollinations.ai/v1/chat/completions', 'pollinations', 'audio', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(realKey ? { Authorization: `Bearer ${realKey}` } : {}) },
-        body: JSON.stringify({
-          model: row.model_id,
-          modalities: ['text', 'audio'],
-          audio: { voice: p.voice ?? 'alloy', format: p.format ?? 'mp3' },
-          messages: [{ role: 'user', content: p.input }],
-        }),
-      });
-      const j = (await r.json()) as { choices?: { message?: { audio?: { data?: string } } }[] };
-      const b64 = j.choices?.[0]?.message?.audio?.data;
-      if (!b64) throw new MediaError('pollinations returned no audio', 502);
-      return { audio: Buffer.from(b64, 'base64'), contentType: contentTypeFor(p.format ?? 'mp3') };
-    }
     case 'google': {
       // Gemini TTS via generateContent (AUDIO modality) returns base64 PCM
       // (L16, mono, ~24kHz); wrap it in a WAV header so clients can play it.
@@ -391,9 +362,7 @@ export async function runImageGeneration(model: string | undefined, params: Imag
   const chain = resolveMediaChain(model, 'image');
   let lastError: MediaError | null = null;
   for (const row of chain) {
-    const credential = KEYLESS_CAPABLE.has(row.platform)
-      ? { id: null, key: null, baseUrl: null }
-      : getProviderCredential(row);
+    const credential = getProviderCredential(row);
     if (!credential) continue; // no usable key for this provider — try the next
     const started = Date.now();
     try {
@@ -417,9 +386,7 @@ export async function runSpeech(model: string | undefined, params: SpeechParams)
   const chain = resolveMediaChain(model, 'audio');
   let lastError: MediaError | null = null;
   for (const row of chain) {
-    const credential = KEYLESS_CAPABLE.has(row.platform)
-      ? { id: null, key: null, baseUrl: null }
-      : getProviderCredential(row);
+    const credential = getProviderCredential(row);
     if (!credential) continue;
     const started = Date.now();
     try {

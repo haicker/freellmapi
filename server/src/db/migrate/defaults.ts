@@ -8,6 +8,7 @@ import * as requestClientInfo from '../migrations/20260706_000001_request_client
 import * as customModelToolSupport from '../migrations/20260706_000002_custom_model_tool_support.js';
 import * as removeQuotaBudget from '../migrations/20260714_000001_remove_quota_budget.js';
 import * as flipIntelligenceScore from '../migrations/20260716_000001_flip_intelligence_score.js';
+import * as removePollinations from '../migrations/20260717_000001_remove_pollinations.js';
 
 export interface MigrationModule {
   up(db: Db): void;
@@ -28,6 +29,7 @@ export const REQUEST_CLIENT_INFO_FILENAME = '20260706_000001_request_client_info
 export const CUSTOM_MODEL_TOOL_SUPPORT_FILENAME = '20260706_000002_custom_model_tool_support.ts';
 export const REMOVE_QUOTA_BUDGET_FILENAME = '20260714_000001_remove_quota_budget.ts';
 export const FLIP_INTELLIGENCE_SCORE_FILENAME = '20260716_000001_flip_intelligence_score.ts';
+export const REMOVE_POLLINATIONS_FILENAME = '20260717_000001_remove_pollinations.ts';
 
 export const DEFAULT_MIGRATIONS: readonly DefaultMigration[] = [
   { filename: LEGACY_BASELINE_FILENAME, module: legacyBaseline },
@@ -39,4 +41,5 @@ export const DEFAULT_MIGRATIONS: readonly DefaultMigration[] = [
   { filename: CUSTOM_MODEL_TOOL_SUPPORT_FILENAME, module: customModelToolSupport },
   { filename: REMOVE_QUOTA_BUDGET_FILENAME, module: removeQuotaBudget },
   { filename: FLIP_INTELLIGENCE_SCORE_FILENAME, module: flipIntelligenceScore },
+  { filename: REMOVE_POLLINATIONS_FILENAME, module: removePollinations },
 ];

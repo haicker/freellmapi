@@ -170,9 +170,6 @@ export const MODEL_PRICING: PricingRow[] = [
   ['openrouter', 'deepseek/deepseek-v3.1:free', 0.21, 0.79],
   ['openrouter', 'moonshotai/kimi-k2:free', 0.57, 2.30],
 
-  // Pollinations (serves gpt-oss-20b)
-  ['pollinations', 'openai-fast', 0.029, 0.14],
-
   // Reka (live /v1/models pricing, 2026-06-17)
   ['reka', 'reka-flash-3', 0.10, 0.20],
   ['reka', 'reka-edge-2603', 0.10, 0.10],

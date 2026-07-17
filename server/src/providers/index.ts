@@ -143,23 +143,6 @@ register(new OpenAICompatProvider({
   keyless: true,
 }));
 
-// Pollinations — OpenAI-compatible, anonymous tier. The chat completions
-// endpoint lives at `/openai/v1/chat/completions` (NOT `/v1/...` — the
-// `/openai` prefix is mandatory). Public model list returns one anonymous
-// model (`openai-fast` = GPT-OSS 20B on OVH, tools=true).
-// Registered keyless (June 2026): the legacy text API is deprecated for
-// AUTHENTICATED users (replacement enter.pollinations.ai is pay-as-you-go
-// "pollen"), while anonymous access is explicitly unaffected — so the anon
-// path is the only recurring-free one left. Anon is queue-limited to 1
-// concurrent request per IP (429 "Queue full" on overlap; live-probed
-// 2026-06-10).
-register(new OpenAICompatProvider({
-  platform: 'pollinations',
-  name: 'Pollinations',
-  baseUrl: 'https://text.pollinations.ai/openai/v1',
-  keyless: true,
-}));
-
 // LLM7.io — OpenAI-compatible aggregator. 100 req/hr free; anonymous access
 // also works for basic models. Wraps a handful of upstream models behind one
 // token (GPT-OSS, Llama 3.1 Turbo via Meta, Codestral via Mistral, Ministral,
