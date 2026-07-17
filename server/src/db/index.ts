@@ -3,8 +3,7 @@ import BetterSqlite from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { runMigrationsSync } from './migrate/runner.js';
-import { initEncryptionKey, isEncryptionKeyInitialized } from '../lib/crypto.js';
+import { initSchema } from './schema.js';
 import type { Db, DbFactory } from './types.js';
 
 export type { Db, DbFactory } from './types.js';
@@ -65,26 +64,10 @@ export function initDb(
   opts?: { ensureDir?: boolean; factory?: DbFactory },
 ): Db {
   const db = connectDb(dbPath, opts);
-
-  if (process.env.NODE_ENV !== 'development') {
-    runMigrationsSync(db, 'up');
-  } else {
-    // In dev, verify the DB has been initialised. If not, give a clear error.
-    const ready = db.prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='migrations'"
-    ).get();
-    if (!ready) {
-      console.error(
-        '\n  [dev] Database not initialised. Run:\n\n' +
-        '    npm run db:migration:up\n\n' +
-        '  Then restart the server.\n'
-      );
-      process.exit(1);
-    }
-  }
-
-  if (!isEncryptionKeyInitialized()) initEncryptionKey(db);
-
+  // The schema is the single source of truth: build it (or bring an existing
+  // DB up to spec) on every boot. NO model data is seeded — the catalog
+  // starts empty and is populated only when a provider key is added.
+  initSchema(db);
   return db;
 }
 

@@ -8,11 +8,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "export-catalog": "tsx src/scripts/export-catalog.ts",
-    "db:migration:up": "tsx src/db/migrate/cli.ts up",
-    "db:migration:down": "tsx src/db/migrate/cli.ts down",
-    "db:migration:fresh": "tsx src/db/migrate/cli.ts fresh",
-    "db:migration:status": "tsx src/db/migrate/cli.ts status",
-    "db:migration:create": "tsx src/db/migrate/cli.ts create"
+    "db:purge-models": "tsx src/scripts/purge-models.ts"
   },
   "dependencies": {
     "@freellmapi/shared": "*",
