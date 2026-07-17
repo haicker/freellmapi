@@ -7,6 +7,13 @@
 
 import type { Db } from '../types.js';
 
+function tableExists(db: Db, name: string): boolean {
+  const row = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+  ).get(name);
+  return !!row;
+}
+
 /**
  * Pollinations (text.pollinations.ai) was a keyless anonymous-tier chat
  * provider. Its legacy text API was deprecated for authenticated users, and
@@ -51,8 +58,15 @@ export function up(db: Db): void {
     // 7. Runtime tables — orphaned rate-limit / quota entries.
     db.prepare("DELETE FROM rate_limit_usage WHERE platform = 'pollinations'").run();
     db.prepare("DELETE FROM rate_limit_cooldowns WHERE platform = 'pollinations'").run();
-    db.prepare("DELETE FROM provider_quota_state WHERE platform = 'pollinations'").run();
-    db.prepare("DELETE FROM provider_quota_observations WHERE platform = 'pollinations'").run();
+    // The provider_quota_* tables were already dropped by the earlier
+    // remove_quota_budget migration, so guard these deletes to keep this
+    // migration runnable regardless of DB state.
+    if (tableExists(db, 'provider_quota_state')) {
+      db.prepare("DELETE FROM provider_quota_state WHERE platform = 'pollinations'").run();
+    }
+    if (tableExists(db, 'provider_quota_observations')) {
+      db.prepare("DELETE FROM provider_quota_observations WHERE platform = 'pollinations'").run();
+    }
 
     // 8. Quirks — drop the pollinations-specific quirk (targets cascade via
     //    FK ON DELETE CASCADE on quirk_targets.quirk_id), and remove the

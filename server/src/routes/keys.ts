@@ -8,6 +8,7 @@ import { resolveProvider, getAllProviders } from '../providers/index.js';
 import { encrypt, decrypt, maskKey } from '../lib/crypto.js';
 import { parseKeysFromFile, stripJsoncComments, stripTrailingCommas } from '../lib/key-parser.js';
 import { assessProviderUrl } from '../lib/url-guard.js';
+import { checkKeyHealth } from '../services/health.js';
 import type { Platform } from '@freellmapi/shared/types.js';
 
 export const keysRouter = Router();
@@ -151,10 +152,34 @@ async function discoverAndSaveModels(platform: Platform, apiKey: string, keyId: 
       return 0;
     }
 
+    // Only auto-add FREE text chat models. Aggregators like OpenRouter/Routeway
+    // mix free (`:free` suffix / zero pricing) and paid routes in their
+    // /v1/models listing; adding paid routes would 402 on first use. Only
+    // models explicitly flagged as free are auto-added — if none are flagged,
+    // nothing is added (the user can manually add via the model dialog).
+    const modelsToAdd = models.filter(m => m.free === true);
+
     const db = getDb();
+
+    // Clean up models previously auto-discovered for this platform (bound to a
+    // key_id) that are NOT in the new free-only set. This removes leftover
+    // non-free models from a prior add (e.g. when the free filter was absent or
+    // buggy), so re-adding a key doesn't leave 300+ unusable paid models in the
+    // database. Catalog-managed models (key_id IS NULL) are never touched.
+    const keepIds = new Set(modelsToAdd.map(m => m.id));
+    const staleRows = db.prepare(
+      `SELECT id, model_id FROM models WHERE platform = ? AND key_id IS NOT NULL`,
+    ).all(platform) as { id: number; model_id: string }[];
+    for (const row of staleRows) {
+      if (!keepIds.has(row.model_id)) {
+        db.prepare('DELETE FROM fallback_config WHERE model_db_id = ?').run(row.id);
+        db.prepare('DELETE FROM models WHERE id = ?').run(row.id);
+      }
+    }
+
     let addedCount = 0;
 
-    for (const model of models) {
+    for (const model of modelsToAdd) {
       try {
         // Check if model already exists
         const existing = db.prepare(
@@ -427,14 +452,33 @@ keysRouter.post('/', async (req: Request, res: Response) => {
     const existing = db.prepare('SELECT id FROM api_keys WHERE platform = ? LIMIT 1').get(platform) as { id: number } | undefined;
     if (existing) {
       db.prepare("UPDATE api_keys SET enabled = 1, status = 'unknown' WHERE id = ?").run(existing.id);
+
+      // Auto health-check + discover free models for the re-enabled keyless provider.
+      let keyStatus: string = 'unknown';
+      let discoveredModels = 0;
+      try {
+        keyStatus = await checkKeyHealth(existing.id);
+      } catch (err) {
+        console.warn(`[${platform}] Health check failed:`, err);
+      }
+      if (keyStatus === 'healthy') {
+        try {
+          discoveredModels = await discoverAndSaveModels(platform, keyToStore, existing.id);
+          console.log(`[${platform}] Discovered and added ${discoveredModels} free models`);
+        } catch (err) {
+          console.warn(`[${platform}] Model discovery failed:`, err);
+        }
+      }
+
       res.status(200).json({
         id: existing.id,
         platform,
         label: label ?? '',
         maskedKey: maskKey(keyToStore),
-        status: 'unknown',
+        status: keyStatus,
         enabled: true,
         modelsAvailable: enabledModelCount(platform),
+        discoveredModels,
         notice: noModelsNotice(platform),
       });
       return;
@@ -448,13 +492,22 @@ keysRouter.post('/', async (req: Request, res: Response) => {
   `).run(platform, label ?? '', encrypted, iv, authTag);
 
   const keyId = Number(result.lastInsertRowid);
-  
-  // Auto-discover models for the provider if it's not keyless
+
+  // Auto health-check, then discover free models if the key is valid.
+  // Applies to both keyed and keyless providers — keyless checkKeyHealth is
+  // instant (marks healthy without a network probe), and keyless providers
+  // (Kilo, OVH) support getAvailableModels for catalog discovery.
+  let keyStatus: string = 'unknown';
   let discoveredModels = 0;
-  if (!isKeyless && keyToStore !== 'no-key') {
+  try {
+    keyStatus = await checkKeyHealth(keyId);
+  } catch (err) {
+    console.warn(`[${platform}] Health check failed:`, err);
+  }
+  if (keyStatus === 'healthy') {
     try {
       discoveredModels = await discoverAndSaveModels(platform, keyToStore, keyId);
-      console.log(`[${platform}] Discovered and added ${discoveredModels} models`);
+      console.log(`[${platform}] Discovered and added ${discoveredModels} free models`);
     } catch (err) {
       console.warn(`[${platform}] Model discovery failed:`, err);
     }
@@ -465,7 +518,7 @@ keysRouter.post('/', async (req: Request, res: Response) => {
     platform,
     label: label ?? '',
     maskedKey: maskKey(keyToStore),
-    status: 'unknown',
+    status: keyStatus,
     enabled: true,
     modelsAvailable: enabledModelCount(platform),
     discoveredModels,

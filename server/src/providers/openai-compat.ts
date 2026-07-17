@@ -276,7 +276,7 @@ export class OpenAICompatProvider extends BaseProvider {
         return undefined;
       }
 
-      const data = await res.json() as { data?: Array<{ id: string; object?: string; name?: string; supports_tools?: boolean; supports_vision?: boolean; pricing?: { prompt?: string; completion?: string } }> };
+      const data = await res.json() as { data?: Array<{ id: string; object?: string; name?: string; supports_tools?: boolean; supports_vision?: boolean }> };
 
       if (!data.data || !Array.isArray(data.data)) {
         return undefined;
@@ -287,12 +287,12 @@ export class OpenAICompatProvider extends BaseProvider {
         name: model.name || model.id,
         supportsTools: model.supports_tools,
         supportsVision: model.supports_vision,
-        // Detect free models: OpenRouter/Routeway/Kilo/BazaarLink use a
-        // ':free' suffix on the id; OpenRouter also exposes a `pricing`
-        // object where free routes report "0" for both prompt and
-        // completion. Either signal marks the model as free.
-        free: model.id.endsWith(':free') ||
-          (model.pricing?.prompt === '0' && model.pricing?.completion === '0'),
+        // Detect free models by name only: aggregators like OpenRouter /
+        // Routeway / Kilo / BazaarLink tag free routes with a ':free' suffix
+        // (e.g. "qwen/qwen3-coder:free"). Do NOT use the pricing field — many
+        // paid OpenRouter models also report "0" pricing, causing false
+        // positives that flood the DB with unusable models.
+        free: /free/i.test(model.id),
       }));
     } catch (error) {
       // Surface timeouts/aborts with a clear message so the caller can tell

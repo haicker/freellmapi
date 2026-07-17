@@ -27,12 +27,30 @@ export function AddKeyForm({ onSuccess }: { onSuccess: () => void }) {
   const addKey = useMutation({
     meta: { silenceToast: true },
     mutationFn: (body: { platform: string; key: string; label?: string }) =>
-      apiFetch<{ notice?: string | null }>('/api/keys', { method: 'POST', body: JSON.stringify(body) }),
+      apiFetch<{ notice?: string | null; status?: string; discoveredModels?: number }>('/api/keys', { method: 'POST', body: JSON.stringify(body) }),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['keys'] })
       queryClient.invalidateQueries({ queryKey: ['health'] })
       queryClient.invalidateQueries({ queryKey: ['fallback'] })
-      toast.success(t('keys.keyAdded'))
+
+      // The backend now runs an immediate health check + free-model discovery.
+      // Surface the outcome with targeted toasts instead of a generic "added".
+      const status = data?.status ?? 'unknown'
+      const discovered = data?.discoveredModels ?? 0
+
+      if (status === 'invalid') {
+        toast.error(t('keys.keyAddedButInvalid'))
+      } else if (status === 'error') {
+        toast.info(t('keys.keyAddedButUnreachable'))
+      } else {
+        // healthy or unknown — key is usable
+        if (discovered > 0) {
+          toast.success(t('keys.keyAddedWithModels', { count: discovered }))
+        } else {
+          toast.success(t('keys.keyAdded'))
+        }
+      }
+
       // Server notice when the key is for a platform with no models in the
       // current catalog tier yet (#438) — surfaced as a toast now that the
       // dialog closes on success.
