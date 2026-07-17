@@ -318,7 +318,9 @@
     "exportKeys plural": "keys",
     "exporting": "Exporting…",
     "exportDownload": "Download",
-    "exportSuccess": "Exported {count} keys"
+    "exportSuccess": "Exported {count} keys",
+    "filterFree": "仅免费",
+    "noFreeModels": "该提供方没有可用的免费模型"
   },
   "status": {
     "healthy": "健康",

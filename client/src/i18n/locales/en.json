@@ -337,6 +337,8 @@
     "deselectAll": "Deselect All",
     "addSelectedModels": "Add {count} selected model(s)",
     "addingModels": "Adding models...",
+    "filterFree": "Free only",
+    "noFreeModels": "No free models available for this provider",
     "quotaSignalsTitle": "Quota signals",
     "quotaSignalsEmptyTitle": "No quota observations yet",
     "quotaSignalsEmptyDesc": "This fills in after providers return rate-limit headers, quota errors, or validation signals.",

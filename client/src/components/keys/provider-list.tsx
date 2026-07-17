@@ -428,15 +428,17 @@ export function ProviderList({ onAddKey }: { onAddKey: () => void }) {
                                         {model.family}
                                       </code>
                                     )}
-                                    <ConfirmButton
-                                      className="h-5 px-1 text-muted-foreground hover:text-destructive"
+                                    <Button
+                                      variant="ghost"
+                                      size="icon-xs"
+                                      className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive"
                                       disabled={deletePlatformModel.isPending || deleteAllPlatformModels.isPending}
-                                      onConfirm={() => deletePlatformModel.mutate(model)}
+                                      onClick={() => deletePlatformModel.mutate(model)}
                                       title={t('common.remove')}
                                       aria-label={t('common.remove')}
                                     >
                                       <Trash2 className="size-3" />
-                                    </ConfirmButton>
+                                    </Button>
                                   </div>
                                 )
                               })}

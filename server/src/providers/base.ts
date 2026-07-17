@@ -86,7 +86,7 @@ export abstract class BaseProvider {
    * Fetch available models from the provider's /v1/models endpoint.
    * Returns an array of model information or undefined if the provider doesn't support model discovery.
    */
-  async getAvailableModels?(apiKey: string): Promise<Array<{id: string; name: string; supportsTools?: boolean; supportsVision?: boolean}> | undefined>;
+  async getAvailableModels?(apiKey: string): Promise<Array<{id: string; name: string; supportsTools?: boolean; supportsVision?: boolean; free?: boolean}> | undefined>;
 
   protected async fetchWithTimeout(
     url: string,

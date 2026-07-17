@@ -12,6 +12,7 @@ interface Model {
   name: string
   supportsTools?: boolean
   supportsVision?: boolean
+  free?: boolean
 }
 
 interface DiscoverModelsResponse {
@@ -30,6 +31,7 @@ export function ModelSelectionDialog({ keyData, open, onOpenChange }: ModelSelec
   const { t } = useI18n()
   const queryClient = useQueryClient()
   const [selectedModels, setSelectedModels] = useState<string[]>([])
+  const [freeOnly, setFreeOnly] = useState(false)
 
   // Fetch available models
   const { data: modelsData, isLoading: modelsLoading, error: modelsError } = useQuery<DiscoverModelsResponse>({
@@ -58,6 +60,10 @@ export function ModelSelectionDialog({ keyData, open, onOpenChange }: ModelSelec
     },
   })
 
+  const models = modelsData?.availableModels || []
+  const hasFreeModels = models.some(m => m.free)
+  const filteredModels = freeOnly ? models.filter(m => m.free) : models
+
   const handleModelToggle = (modelId: string) => {
     setSelectedModels(prev =>
       prev.includes(modelId)
@@ -67,10 +73,9 @@ export function ModelSelectionDialog({ keyData, open, onOpenChange }: ModelSelec
   }
 
   const handleSelectAll = () => {
-    if (!modelsData?.availableModels) return
     setSelectedModels(prev => [
       ...prev,
-      ...modelsData.availableModels
+      ...filteredModels
         .filter(model => !prev.includes(model.id))
         .map(model => model.id)
     ])
@@ -88,8 +93,6 @@ export function ModelSelectionDialog({ keyData, open, onOpenChange }: ModelSelec
   }
 
   const close = () => onOpenChange(false)
-
-  const models = modelsData?.availableModels || []
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -135,13 +138,28 @@ export function ModelSelectionDialog({ keyData, open, onOpenChange }: ModelSelec
                     {t('keys.noModelsAvailable')}
                   </p>
                 </div>
+              ) : filteredModels.length === 0 ? (
+                <div className="py-12 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    {t('keys.noFreeModels')}
+                  </p>
+                </div>
               ) : (
                 <>
                   <div className="flex items-center justify-between mb-4">
                     <div className="text-sm text-muted-foreground">
-                      {t('keys.availableModelsCount', { count: models.length })}
+                      {t('keys.availableModelsCount', { count: filteredModels.length })}
                     </div>
                     <div className="flex gap-2">
+                      {hasFreeModels && (
+                        <Button
+                          variant={freeOnly ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setFreeOnly(v => !v)}
+                        >
+                          {t('keys.filterFree')}
+                        </Button>
+                      )}
                       <Button variant="outline" size="sm" onClick={handleSelectAll}>
                         {t('keys.selectAll')}
                       </Button>
@@ -152,7 +170,7 @@ export function ModelSelectionDialog({ keyData, open, onOpenChange }: ModelSelec
                   </div>
 
                   <div className="max-h-96 overflow-y-auto border rounded-lg">
-                    {models.map((model) => (
+                    {filteredModels.map((model) => (
                       <div
                         key={model.id}
                         className="flex items-center p-3 border-b last:border-b-0 hover:bg-muted/50 cursor-pointer"
@@ -172,6 +190,11 @@ export function ModelSelectionDialog({ keyData, open, onOpenChange }: ModelSelec
                             {model.id}
                           </div>
                           <div className="flex gap-2 mt-1">
+                            {model.free && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-emerald-100 text-emerald-800">
+                                Free
+                              </span>
+                            )}
                             {model.supportsTools && (
                               <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800">
                                 Tools

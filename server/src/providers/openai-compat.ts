@@ -258,7 +258,7 @@ export class OpenAICompatProvider extends BaseProvider {
     return res.status !== 401 && res.status !== 403;
   }
 
-  async getAvailableModels(apiKey: string): Promise<Array<{id: string; name: string; supportsTools?: boolean; supportsVision?: boolean}> | undefined> {
+  async getAvailableModels(apiKey: string): Promise<Array<{id: string; name: string; supportsTools?: boolean; supportsVision?: boolean; free?: boolean}> | undefined> {
     try {
       // Route through fetchWithTimeout (proxyFetch + abort timer) — a bare
       // fetch has no timeout, so a slow/unresponsive /models endpoint would
@@ -276,7 +276,7 @@ export class OpenAICompatProvider extends BaseProvider {
         return undefined;
       }
 
-      const data = await res.json() as { data?: Array<{ id: string; object?: string; name?: string; supports_tools?: boolean; supports_vision?: boolean }> };
+      const data = await res.json() as { data?: Array<{ id: string; object?: string; name?: string; supports_tools?: boolean; supports_vision?: boolean; pricing?: { prompt?: string; completion?: string } }> };
 
       if (!data.data || !Array.isArray(data.data)) {
         return undefined;
@@ -287,6 +287,12 @@ export class OpenAICompatProvider extends BaseProvider {
         name: model.name || model.id,
         supportsTools: model.supports_tools,
         supportsVision: model.supports_vision,
+        // Detect free models: OpenRouter/Routeway/Kilo/BazaarLink use a
+        // ':free' suffix on the id; OpenRouter also exposes a `pricing`
+        // object where free routes report "0" for both prompt and
+        // completion. Either signal marks the model as free.
+        free: model.id.endsWith(':free') ||
+          (model.pricing?.prompt === '0' && model.pricing?.completion === '0'),
       }));
     } catch (error) {
       // Surface timeouts/aborts with a clear message so the caller can tell
