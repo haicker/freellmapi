@@ -178,6 +178,7 @@ function createTables(db: Db): void {
       max_input_tokens INTEGER,
       priority INTEGER NOT NULL DEFAULT 0,
       enabled INTEGER NOT NULL DEFAULT 1,
+      key_id INTEGER,
       quota_label TEXT NOT NULL DEFAULT '',
       UNIQUE(platform, model_id)
     );
@@ -190,6 +191,7 @@ function createTables(db: Db): void {
       modality TEXT NOT NULL,
       priority INTEGER NOT NULL DEFAULT 0,
       enabled INTEGER NOT NULL DEFAULT 1,
+      key_id INTEGER,
       quota_label TEXT NOT NULL DEFAULT '',
       UNIQUE(platform, model_id)
     );
@@ -231,6 +233,8 @@ function createTables(db: Db): void {
   ensureColumn(db, 'models', 'supports_tools', 'INTEGER NOT NULL DEFAULT 0');
   ensureColumn(db, 'models', 'paid_input_per_m', 'REAL');
   ensureColumn(db, 'models', 'paid_output_per_m', 'REAL');
+  ensureColumn(db, 'embedding_models', 'key_id', 'INTEGER');
+  ensureColumn(db, 'media_models', 'key_id', 'INTEGER');
   ensureColumn(db, 'api_keys', 'base_url', 'TEXT');
   ensureColumn(db, 'requests', 'key_id', 'INTEGER');
   ensureColumn(db, 'requests', 'ttfb_ms', 'INTEGER');
