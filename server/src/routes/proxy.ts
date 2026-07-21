@@ -733,7 +733,6 @@ proxyRouter.post('/completions', async (req: Request, res: Response) => {
       state.skipModels.size > 0 ? state.skipModels : undefined,
       groupChain ?? resolvedChain?.chain,
       false,
-      !isAutoModel(requestedModel),
     ),
     dispatch: async (route, attempt) => {
       traceRouteEvent('Proxy', {
@@ -1456,7 +1455,6 @@ proxyRouter.post('/chat/completions', async (req: Request, res: Response) => {
         state.skipModels.size > 0 ? state.skipModels : undefined,
         groupChain ?? resolvedChain?.chain,
         samplingParams.response_format !== undefined,
-        !isAutoModel(requestedModel),
       );
     },
     dispatch: async (route, attempt) => {

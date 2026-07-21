@@ -1,5 +1,6 @@
 import type { ModelListRow } from '@freellmapi/shared/types.js';
 import { getDb } from '../db/index.js';
+import { getAllProviders } from '../providers/index.js';
 import { isUnifyEnabled, getModelGroups } from './model-groups.js';
 
 // Shared catalog-listing logic behind both the OpenAI `GET /v1/models` and the
@@ -32,12 +33,21 @@ export interface ModelListing {
 }
 
 export function buildModelListing(): ModelListing {
+  // Keyless providers (kilo / ovh / aihorde) need no api_keys row to route — a
+  // model is "available" for them as long as it's enabled, matching the router's
+  // keyless handling (see router.ts selectKeyForModel). Without this, /v1/models
+  // would mark keyless models unavailable while auto-routing actually uses them.
+  const keylessPlatforms = getAllProviders().filter(p => p.keyless).map(p => `'${p.platform}'`).join(',');
+  const keylessClause = keylessPlatforms ? `OR m.platform IN (${keylessPlatforms})` : '';
   const availableExpr = `
-    (CASE WHEN m.enabled = 1 AND EXISTS (
-        SELECT 1 FROM api_keys k
-        WHERE k.platform = m.platform
-          AND k.enabled = 1
-          AND (m.key_id IS NULL OR k.id = m.key_id)
+    (CASE WHEN m.enabled = 1 AND (
+        EXISTS (
+          SELECT 1 FROM api_keys k
+          WHERE k.platform = m.platform
+            AND k.enabled = 1
+            AND (m.key_id IS NULL OR k.id = m.key_id)
+        )
+        ${keylessClause}
       ) THEN 1 ELSE 0 END)`;
   const db = getDb();
 

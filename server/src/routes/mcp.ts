@@ -4,6 +4,7 @@ import { getDb, getUnifiedApiKey } from '../db/index.js';
 import { extractApiToken, timingSafeStringEqual } from './proxy.js';
 import { buildModelListing } from '../services/model-listing.js';
 import { supportedParametersForPlatforms } from '../lib/sampling-params.js';
+import { getAllProviders } from '../providers/index.js';
 import { getRoutingScores, getRoutingStrategy, setRoutingStrategy } from '../services/router.js';
 import type { RoutingStrategy } from '../services/scoring.js';
 import { getCacheStats } from '../services/cache.js';
@@ -96,13 +97,21 @@ function providerHealth(): unknown {
     FROM rate_limit_cooldowns WHERE expires_at_ms > ?
     GROUP BY platform
   `).all(now) as Array<{ platform: string; n: number }>;
+  // Keyless providers need no api_keys row to be available (see router.ts
+  // selectKeyForModel) — count them as available when enabled, matching the
+  // router and /v1/models listing.
+  const keylessPlatforms = getAllProviders().filter(p => p.keyless).map(p => `'${p.platform}'`).join(',');
+  const keylessClause = keylessPlatforms ? `OR m.platform IN (${keylessPlatforms})` : '';
   const availableModels = db.prepare(`
     SELECT m.platform, COUNT(*) AS n
     FROM models m
-    WHERE m.enabled = 1 AND EXISTS (
-      SELECT 1 FROM api_keys k
-      WHERE k.platform = m.platform AND k.enabled = 1
-        AND (m.key_id IS NULL OR k.id = m.key_id)
+    WHERE m.enabled = 1 AND (
+      EXISTS (
+        SELECT 1 FROM api_keys k
+        WHERE k.platform = m.platform AND k.enabled = 1
+          AND (m.key_id IS NULL OR k.id = m.key_id)
+      )
+      ${keylessClause}
     )
     GROUP BY m.platform
   `).all() as Array<{ platform: string; n: number }>;

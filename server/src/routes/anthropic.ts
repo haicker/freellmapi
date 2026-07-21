@@ -439,7 +439,6 @@ anthropicRouter.post('/messages', async (req: Request, res: Response) => {
       state.skipModels.size > 0 ? state.skipModels : undefined,
       undefined,
       false,
-      resolved.pinned,
     ),
     dispatch: async (route, attempt) => {
       if (stream) {
