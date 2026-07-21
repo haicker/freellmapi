@@ -273,7 +273,7 @@ function upsertModel(db: Db, input: z.infer<typeof modelSchema>): void {
       input.contextWindow ?? null,
       input.enabled === false ? 0 : 1,
       input.supportsVision ? 1 : 0,
-      input.supportsTools ? 1 : 0,
+      input.supportsTools !== false ? 1 : 0, // default to true for tool support
     );
     const created = db.prepare('SELECT id FROM models WHERE platform = ? AND model_id = ?').get(platform, modelId) as { id: number };
     ensureFallbackRow(db, created.id, input.fallbackEnabled ?? input.enabled !== false);

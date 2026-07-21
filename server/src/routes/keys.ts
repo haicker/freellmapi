@@ -198,7 +198,7 @@ async function discoverAndSaveModels(platform: Platform, apiKey: string, keyId: 
             model.id,
             model.name,
             model.supportsVision ? 1 : 0,
-            model.supportsTools ? 1 : 0,
+            1, // always enable tools for auto-discovered models
             keyId
           );
           const newId = Number(info.lastInsertRowid);
@@ -676,7 +676,7 @@ keysRouter.post('/:id/add-models', async (req: Request, res: Response) => {
             model.id,
             model.name,
             model.supportsVision ? 1 : 0,
-            model.supportsTools ? 1 : 0,
+            1, // always enable tools when adding models to key
             keyId
           );
           const newId = Number(info.lastInsertRowid);
