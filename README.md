@@ -1,10 +1,28 @@
 # FreeLLMAPI（修改版）
 
-## 项目来源
+将多家 LLM 提供商的免费额度聚合到一个 OpenAI 兼容的 `/v1` 端点之后，提供智能路由、自动故障转移、密钥加密存储、可视化管理面板等功能。
 
-本项目 fork 自 [tashfeenahmed/freellmapi](https://github.com/tashfeenahmed/freellmapi)（v0.4.1），原项目以 MIT 协议开源。原作者保留所有版权。
+本项目 fork 自 [tashfeenahmed/freellmapi](https://github.com/tashfeenahmed/freellmapi)（v0.4.1，MIT 协议），原作者保留所有版权。
 
-原项目将多家 LLM 提供商的免费额度聚合到一个 OpenAI 兼容的 `/v1` API 端点之后，提供路由、故障转移、密钥加密存储、管理面板等功能。完整的原始文档请见上游仓库。
+---
+
+## 功能特性
+
+- **多提供商聚合**：支持 30+ LLM 提供商的免费额度，包括 Google Gemini、Groq、Cerebras、NVIDIA、Mistral、OpenRouter、GitHub Models、Cohere、Cloudflare、HuggingFace、Ollama Cloud、SiliconFlow 等，以及任意自定义 OpenAI 兼容端点（Ollama / vLLM / LM Studio / llama.cpp）
+- **智能路由**：基于贝叶斯多臂老虎机的实时评分系统，按可靠性、速度、智能度三维加权自动选择最优模型；提供 balanced / smartest / fastest / reliable / custom 五种预设策略，也支持手动优先级链
+- **自动故障转移**：请求失败时自动切换到下一个可用模型/密钥，支持速率限制冷却、支付墙检测、错误重试
+- **多协议兼容**：
+  - OpenAI Chat Completions API（`/v1/chat/completions`）
+  - OpenAI Responses API（`/v1/responses`，Codex CLI 兼容）
+  - Anthropic Messages API（`/v1/messages`，Claude Code 兼容）
+  - OpenAI Embeddings API（`/v1/embeddings`，同族跨提供商故障转移）
+  - 图片生成 & 语音合成（`/v1/images/generations`、`/v1/audio/speech`）
+  - MCP 协议网关（`/mcp`，为 MCP 客户端提供路由查询、健康检查等工具）
+- **Fusion 融合推理**：调用 `model: "fusion"` 时，一组模型并行作答，再由评审模型综合出更优答案
+- **管理面板**：内置 React 单页应用，支持密钥管理、模型配置、路由策略调整、请求分析、内置 Playground
+- **安全特性**：API 密钥 AES-256-GCM 加密存储、统一密钥认证、首次访问安全码、CORS 控制、可选 SSRF 防护
+- **多语言界面**：支持中文、英语、法语、西班牙语、葡萄牙语、意大利语
+- **声明式配置**：通过 JSON 文件在启动时自动配置密钥、模型、路由策略
 
 ---
 
@@ -12,25 +30,15 @@
 
 以下改动均基于上游 v0.4.1，未向回上游提交 PR。
 
-### 1. 移除每月令牌额度与配额追踪系统
-
-### 2. 模型 RPM / RPD 限额可在前端编辑
-
-### 3. 密钥页：为每个提供商增加已添加模型列表
-
-### 4. 去除付费高级版（Premium / Live Catalog）
-
-移除了原项目的付费订阅与远程目录同步系统。
-
-### 5. 添加密钥后自动拉取模型列表
-
-### 6. 自定义端点无需手动输入模型 ID
-
-### 7. 修复 auto 路由忽略自定义端点模型
-
-### 8. 模型智能值可以在前端编辑
-
-原项目自定义端点模型智能值为0，且所有模型的智能值不可编辑。
+1. **移除每月令牌额度与配额追踪系统**
+2. **模型 RPM / RPD 限额可在前端编辑**
+3. **密钥页：为每个提供商增加已添加模型列表**
+4. **去除付费高级版（Premium / Live Catalog）**：移除付费订阅与远程目录同步系统
+5. **添加密钥后自动拉取模型列表**
+6. **自定义端点无需手动输入模型 ID**：添加后通过模型发现对话框拉取
+7. **修复 auto 路由忽略自定义端点模型**
+8. **模型智能值可以在前端编辑**：原项目自定义端点模型智能值为 0，且所有模型不可编辑
+9. **模型默认上下文长度改为 256K**：添加模型时默认上下文长度从 8K 提升到 256K，避免路由器因上下文估算过小而误判模型不可用
 
 ---
 
@@ -64,6 +72,23 @@ docker compose logs -f
 容器端口默认绑定到 `0.0.0.0:3001`，可通过 `http://<服务器IP>:3001` 访问。SQLite 数据持久化在 `freellmapi-data` volume 中。
 
 > 如需限制仅本机访问，在 `.env` 中加 `HOST=127.0.0.1`，并将 `docker-compose.yml` 的端口映射改为 `127.0.0.1:3001:3001`。
+
+#### 更新 Docker 部署
+
+```bash
+# 1. 拉取最新镜像
+docker compose pull
+
+# 2. 重启容器（数据不丢失）
+docker compose up -d
+
+# 3.（可选）清理旧镜像释放空间
+docker image prune -f
+```
+
+- **数据安全**：SQLite 数据持久化在 `freellmapi-data` volume 中，更新镜像不会丢失数据。
+- **镜像标签**：`docker-compose.yml` 默认使用 `latest`，`docker compose pull` 会自动拉取最新版本。
+- **固定版本**：若不想自动跟随 `latest`，可将 `docker-compose.yml` 中的镜像标签改为具体版本号，例如 `ghcr.io/haicker/freellmapi:v0.1.1`。
 
 <details>
 <summary>自定义端口或其他环境变量</summary>
@@ -99,7 +124,21 @@ node server/dist/index.js
 
 打开 http://ip:3001 即可访问管理面板。
 
-### 配置项
+### 进程管理（推荐）
+
+使用 PM2 或 systemd 保持服务持续运行：
+
+```bash
+# PM2
+npm run build
+pm2 start "node server/dist/index.js" --name freellmapi
+pm2 save
+pm2 startup        # 开机自启
+```
+
+---
+
+## 配置项
 
 所有配置通过项目根目录 `.env` 文件设置，完整说明见 `.env.example`。关键项：
 
@@ -126,6 +165,10 @@ node server/dist/index.js
 | `DASHBOARD_ORIGINS` | 额外允许的 CORS 来源 |
 
 </details>
+
+---
+
+## 快速开始
 
 ### 首次启动
 
@@ -165,17 +208,30 @@ export ANTHROPIC_AUTH_TOKEN=freellmapi-your-unified-key   # 注意不是 ANTHROP
 claude
 ```
 
-### 进程管理（推荐）
+**Fusion 融合推理**（多模型并行作答 + 评审综合）：
 
-使用 PM2 或 systemd 保持服务持续运行：
-
-```bash
-# PM2
-npm run build
-pm2 start "node server/dist/index.js" --name freellmapi
-pm2 save
-pm2 startup        # 开机自启
+```python
+resp = client.chat.completions.create(
+    model="fusion",  # 一组模型并行作答，评审模型综合出更优答案
+    messages=[{"role": "user", "content": "解释量子纠缠"}],
+)
 ```
+
+---
+
+## 支持的提供商
+
+| 提供商 | 说明 |
+|--------|------|
+| Google Gemini | 原生 Gemini API 格式 |
+| Groq / Cerebras / NVIDIA NIM | 高速推理，OpenAI 兼容 |
+| Mistral / OpenRouter / GitHub Models | OpenAI 兼容 |
+| Cohere / Cloudflare Workers AI | 各自兼容端点 |
+| Zhipu AI (智谱) / HuggingFace Router | OpenAI 兼容 |
+| Ollama Cloud / LLM7 / Kilo / OVH | 免费/无密钥访问 |
+| OpenCode Zen / Reka / SiliconFlow / Routeway 等 | 多家聚合器 |
+| AI Horde | 社区驱动的免费推理 |
+| Custom | 任意 OpenAI 兼容端点（Ollama / vLLM / LM Studio / llama.cpp） |
 
 ---
 

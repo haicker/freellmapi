@@ -7,6 +7,12 @@ server/data/*.db-wal
 .env
 .encryption-key
 .git
+.github
 .workbuddy
 nul
 *.log
+README.md
+LICENSE
+docker-compose.yml
+Dockerfile
+.dockerignore
