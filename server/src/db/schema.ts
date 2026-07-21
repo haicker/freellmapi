@@ -23,6 +23,7 @@ export function initSchema(db: Db): void {
   initEncryptionKey(db);
   ensureUnifiedKey(db);
   ensureDefaultProfile(db);
+  fixupAutoDiscoveryTpmLimit(db);
   seedQuirks(db);
 }
 
@@ -298,6 +299,29 @@ function ensureDefaultProfile(db: Db): void {
   `).run(String(profileId));
 
   console.log('Created Default profile');
+}
+
+// ── Auto-discovery tpm_limit fixup ──────────────────────────────────────────
+//
+// Historically, auto-discovery (keys.ts discoverAndSaveModels / add-models)
+// stamped every model with tpm_limit = 10000 — an arbitrary, provider-agnostic
+// default. 10K TPM rejects any request whose estimated input exceeds ~40KB of
+// text, which is common for coding agents and long conversations. The router's
+// tpm fast-path then skips the ENTIRE chain with a misleading "prompt too large
+// for the model" error, even though every model has a 256K context window.
+//
+// The INSERT default is now NULL (provider enforces its own real limit via
+// 429s, handled by the cooldown/retry loop). This fixup brings EXISTING rows up
+// to the same state on the next boot: only auto-discovered models (key_id IS NOT
+// NULL) carrying the stale 10000 default are touched. Operator-set values
+// (including a deliberate 10000 on a catalog-managed row) are preserved.
+function fixupAutoDiscoveryTpmLimit(db: Db): void {
+  const result = db.prepare(
+    "UPDATE models SET tpm_limit = NULL WHERE tpm_limit = 10000 AND key_id IS NOT NULL",
+  ).run();
+  if (result.changes > 0) {
+    console.log(`Reset ${result.changes} auto-discovered model(s) with stale tpm_limit=10000 to NULL (provider enforces real limit).`);
+  }
 }
 
 // ── Quirks seed ──────────────────────────────────────────────────────────────

@@ -65,7 +65,13 @@ export function summarizeExhaustion(
     const l = line.toLowerCase();
     if (l.includes('no provider registered')) bump('unsupported provider');
     else if (/no enabled\+healthy key|no usable key|decrypt-error/.test(l)) bump('no usable key configured');
-    else if (l.includes('< estimated')) bump('prompt too large for the model');
+    // Distinguish the two "too large" fast-path skips. Both diag lines share the
+    // "< estimated" substring, but tpm_limit is a per-MINUTE budget (often a
+    // bogusly low auto-discovery default — see keys.ts) while context is the
+    // model's hard window. Bucketing them together as "prompt too large" sent
+    // users chasing context-window fixes when the real culprit was tpm_limit.
+    else if (l.includes('tpm_limit')) bump('exceeds per-minute token budget');
+    else if (l.includes('context') && l.includes('< estimated')) bump('prompt too large for the model');
     else if (l.includes('no vision support')) bump('model lacks vision');
     else if (l.includes('no tool-calling support')) bump('model lacks tool-calling');
     else if (l.includes('drops response_format')) bump('platform cannot honor response_format');
@@ -77,6 +83,7 @@ export function summarizeExhaustion(
   const order = [
     'rate-limited or on cooldown',
     'no usable key configured',
+    'exceeds per-minute token budget',
     'prompt too large for the model',
     'model lacks vision',
     'model lacks tool-calling',

@@ -192,7 +192,7 @@ async function discoverAndSaveModels(platform: Platform, apiKey: string, keyId: 
             INSERT INTO models (platform, model_id, display_name, intelligence_rank, speed_rank, size_label,
                              rpm_limit, rpd_limit, tpm_limit, tpd_limit, context_window,
                              enabled, supports_vision, supports_tools, key_id)
-            VALUES (?, ?, ?, 50, 5, 'Medium', 60, 1000, 10000, null, 262144, 1, ?, ?, ?)
+            VALUES (?, ?, ?, 50, 5, 'Medium', 60, 1000, null, null, 262144, 1, ?, ?, ?)
           `).run(
             platform,
             model.id,
@@ -670,7 +670,7 @@ keysRouter.post('/:id/add-models', async (req: Request, res: Response) => {
             INSERT INTO models (platform, model_id, display_name, intelligence_rank, speed_rank, size_label,
                              rpm_limit, rpd_limit, tpm_limit, tpd_limit, context_window,
                              enabled, supports_vision, supports_tools, key_id)
-            VALUES (?, ?, ?, 50, 5, 'Medium', 60, 1000, 10000, null, 262144, 1, ?, ?, ?)
+            VALUES (?, ?, ?, 50, 5, 'Medium', 60, 1000, null, null, 262144, 1, ?, ?, ?)
           `).run(
             keyRow.platform,
             model.id,
