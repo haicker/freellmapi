@@ -278,6 +278,7 @@
     "customTypeEmbedding": "嵌入",
     "customTypeImage": "图像",
     "customTypeAudio": "音频",
+"customTypeVideo": "视频",
     "customModel": "模型",
     "customModelOptional": "可选 — 添加后可在模型列表自动发现",
     "customFamily": "系列",
@@ -285,6 +286,7 @@
     "addEmbeddingModel": "添加嵌入模型",
     "addImageModel": "添加图像模型",
     "addAudioModel": "添加音频模型",
+"addVideoModel": "添加视频模型",
     "importKeys": "导入提供方密钥",
     "importKeysDescription": "上传 .env、JSON、JSONC、CSV、Markdown 或文本文件。",
     "importFiles": "文件",
@@ -323,6 +325,12 @@
     "exportDownload": "Download",
     "exportSuccess": "Exported {count} keys",
     "filterFree": "仅免费",
+    "filterAll": "全部",
+    "kindChat": "聊天",
+    "kindEmbedding": "嵌入",
+    "kindImage": "图像",
+    "kindAudio": "音频",
+    "kindVideo": "视频",
     "noFreeModels": "该提供方没有可用的免费模型"
   },
   "status": {

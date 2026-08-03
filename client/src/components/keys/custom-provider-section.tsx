@@ -28,7 +28,7 @@ function parseModelList(raw: string): string[] {
 export function CustomProviderSection({ onAdded }: { onAdded?: () => void } = {}) {
   const { t } = useI18n()
   const queryClient = useQueryClient()
-  const [customType, setCustomType] = useState<'chat' | 'embedding' | 'image' | 'audio'>('chat')
+  const [customType, setCustomType] = useState<'chat' | 'embedding' | 'image' | 'audio' | 'video'>('chat')
   const [baseUrl, setBaseUrl] = useState('')
   const [model, setModel] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -42,8 +42,8 @@ export function CustomProviderSection({ onAdded }: { onAdded?: () => void } = {}
   const models = customType === 'chat' ? parseModelList(model) : [model.trim()].filter(Boolean)
   const multiple = customType === 'chat' && models.length > 1
   // Chat endpoints can be registered without models (discovered later via the
-  // model-selection dialog); embedding/image/audio need a model id at request
-  // time, so they stay required.
+  // model-selection dialog); embedding/image/audio/video need a model id at
+  // request time, so they stay required.
   const modelRequired = customType !== 'chat'
 
   // Field-level validation: submit stays clickable and reveals what is
@@ -135,14 +135,18 @@ export function CustomProviderSection({ onAdded }: { onAdded?: () => void } = {}
       ? 'text-embedding-3-small'
       : customType === 'image'
         ? 'gpt-image-1'
-        : 'gpt-4o-mini-tts'
+        : customType === 'video'
+          ? 'veo-3'
+          : 'gpt-4o-mini-tts'
   const addLabel = customType === 'chat'
     ? (models.length === 0 ? t('keys.addEndpoint') : multiple ? t('keys.addModels', { count: models.length }) : t('keys.addModel'))
     : customType === 'embedding'
       ? t('keys.addEmbeddingModel')
       : customType === 'image'
         ? t('keys.addImageModel')
-        : t('keys.addAudioModel')
+        : customType === 'video'
+          ? t('keys.addVideoModel')
+          : t('keys.addAudioModel')
 
   const form = (
       <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
@@ -157,6 +161,7 @@ export function CustomProviderSection({ onAdded }: { onAdded?: () => void } = {}
               <SelectItem value="embedding">{t('keys.customTypeEmbedding')}</SelectItem>
               <SelectItem value="image">{t('keys.customTypeImage')}</SelectItem>
               <SelectItem value="audio">{t('keys.customTypeAudio')}</SelectItem>
+              <SelectItem value="video">{t('keys.customTypeVideo')}</SelectItem>
             </SelectContent>
           </Select>
         </div>

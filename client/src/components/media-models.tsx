@@ -15,7 +15,7 @@ export interface MediaModel {
   platform: string
   modelId: string
   displayName: string
-  modality: 'image' | 'audio'
+  modality: 'image' | 'audio' | 'video'
   enabled: boolean
   quotaLabel: string
   keyCount: number
@@ -50,7 +50,7 @@ export function groupMedia(models: MediaModel[]): MediaGroup[] {
 // per-provider enable toggle (saved immediately). Rows arrive from the signed
 // catalog via catalog-sync, so the list self-populates once a media catalog is
 // applied.
-export function MediaModelsView({ modality }: { modality: 'image' | 'audio' }) {
+export function MediaModelsView({ modality }: { modality: 'image' | 'audio' | 'video' }) {
   const { t } = useI18n()
   const queryClient = useQueryClient()
 

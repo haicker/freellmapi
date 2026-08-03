@@ -46,7 +46,7 @@ const customMediaSchema = z.object({
   baseUrl: z.string().url('baseUrl must be a valid URL'),
   model: z.string().min(1),
   displayName: z.string().optional(),
-  modality: z.enum(['image', 'audio']),
+  modality: z.enum(['image', 'audio', 'video']),
   apiKey: z.string().optional(),
   label: z.string().optional(),
   quotaLabel: z.string().optional(),

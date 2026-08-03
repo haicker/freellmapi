@@ -14,7 +14,7 @@ import { proxyFetch } from '../lib/proxy.js';
 /** Platforms with a media adapter below. */
 export const MEDIA_PLATFORMS = new Set(['nvidia', 'cloudflare', 'siliconflow', 'google']);
 
-export type MediaModality = 'image' | 'audio';
+export type MediaModality = 'image' | 'audio' | 'video';
 
 export interface MediaModelRow {
   id: number;

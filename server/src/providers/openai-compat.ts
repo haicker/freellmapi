@@ -9,6 +9,7 @@ import { BaseProvider, providerHttpError, type CompletionOptions } from './base.
 import { extendedBodyParams } from '../lib/sampling-params.js';
 import { rescueInlineToolCalls } from '../lib/tool-call-rescue.js';
 import { repairToolArguments, toolSchemaMap } from '../lib/tool-args.js';
+import { classifyModel, type ModelKind } from '../lib/model-classify.js';
 
 /**
  * Generic provider for platforms that use an OpenAI-compatible API.
@@ -18,7 +19,7 @@ import { repairToolArguments, toolSchemaMap } from '../lib/tool-args.js';
 export class OpenAICompatProvider extends BaseProvider {
   readonly platform: Platform;
   readonly name: string;
-  private readonly baseUrl: string;
+  readonly baseUrl: string;
   private readonly extraHeaders: Record<string, string>;
   private readonly validateUrl?: string;
   /** Per-provider HTTP timeout override. Cloud APIs finish in ~15s; locally-hosted
@@ -258,7 +259,7 @@ export class OpenAICompatProvider extends BaseProvider {
     return res.status !== 401 && res.status !== 403;
   }
 
-  async getAvailableModels(apiKey: string): Promise<Array<{id: string; name: string; supportsTools?: boolean; supportsVision?: boolean; free?: boolean}> | undefined> {
+  async getAvailableModels(apiKey: string): Promise<Array<{id: string; name: string; supportsTools?: boolean; supportsVision?: boolean; free?: boolean; kind?: ModelKind}> | undefined> {
     try {
       // Route through fetchWithTimeout (proxyFetch + abort timer) — a bare
       // fetch has no timeout, so a slow/unresponsive /models endpoint would
@@ -293,6 +294,11 @@ export class OpenAICompatProvider extends BaseProvider {
         // paid OpenRouter models also report "0" pricing, causing false
         // positives that flood the DB with unusable models.
         free: /free/i.test(model.id),
+        // Classify the model kind so the discovery flow can route it to the
+        // correct table (chat → models, embedding → embedding_models, image /
+        // audio / video → media_models). Without this, an embedding or image
+        // model would land in the chat catalog and break routing.
+        kind: classifyModel(model.id),
       }));
     } catch (error) {
       // Surface timeouts/aborts with a clear message so the caller can tell

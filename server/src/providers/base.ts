@@ -8,6 +8,7 @@ import type {
 } from '@freellmapi/shared/types.js';
 import type { ExtendedSamplingOptions } from '../lib/sampling-params.js';
 import { proxyFetch } from '../lib/proxy.js';
+import type { ModelKind } from '../lib/model-classify.js';
 
 /** A provider HTTP error carrying the upstream status and, when the response
  *  included a Retry-After header, the parsed delay so the router can bench the
@@ -85,8 +86,12 @@ export abstract class BaseProvider {
   /**
    * Fetch available models from the provider's /v1/models endpoint.
    * Returns an array of model information or undefined if the provider doesn't support model discovery.
+   *
+   * `kind` classifies each model as chat / embedding / image / audio / video so
+   * the discovery flow can route it to the correct database table instead of
+   * dumping every model into the chat catalog.
    */
-  async getAvailableModels?(apiKey: string): Promise<Array<{id: string; name: string; supportsTools?: boolean; supportsVision?: boolean; free?: boolean}> | undefined>;
+  async getAvailableModels?(apiKey: string): Promise<Array<{id: string; name: string; supportsTools?: boolean; supportsVision?: boolean; free?: boolean; kind?: ModelKind}> | undefined>;
 
   protected async fetchWithTimeout(
     url: string,

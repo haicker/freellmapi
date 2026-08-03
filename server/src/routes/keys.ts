@@ -9,6 +9,10 @@ import { encrypt, decrypt, maskKey } from '../lib/crypto.js';
 import { parseKeysFromFile, stripJsoncComments, stripTrailingCommas } from '../lib/key-parser.js';
 import { assessProviderUrl } from '../lib/url-guard.js';
 import { checkKeyHealth } from '../services/health.js';
+import { classifyModel, type ModelKind } from '../lib/model-classify.js';
+import { probeDimensionsForPlatform } from '../services/embeddings.js';
+import { OpenAICompatProvider } from '../providers/openai-compat.js';
+import type { BaseProvider } from '../providers/base.js';
 import type { Platform } from '@freellmapi/shared/types.js';
 
 export const keysRouter = Router();
@@ -152,12 +156,16 @@ async function discoverAndSaveModels(platform: Platform, apiKey: string, keyId: 
       return 0;
     }
 
-    // Only auto-add FREE text chat models. Aggregators like OpenRouter/Routeway
+    // Only auto-add FREE text CHAT models. Aggregators like OpenRouter/Routeway
     // mix free (`:free` suffix / zero pricing) and paid routes in their
     // /v1/models listing; adding paid routes would 402 on first use. Only
     // models explicitly flagged as free are auto-added — if none are flagged,
     // nothing is added (the user can manually add via the model dialog).
-    const modelsToAdd = models.filter(m => m.free === true);
+    // Non-chat kinds (embedding / image / audio / video) are skipped here —
+    // they need extra setup (dimension probe, modality routing) and are better
+    // added explicitly through the model-selection dialog where the user can
+    // see and confirm their type.
+    const modelsToAdd = models.filter(m => m.free === true && (!m.kind || m.kind === 'chat'));
 
     const db = getDb();
 
@@ -262,8 +270,8 @@ keysRouter.get('/', (_req: Request, res: Response) => {
   }
   for (const list of modelsByKeyId.values()) {
     list.sort((a, b) => {
-      const ka = ['chat', 'embedding', 'image', 'audio'].indexOf(a.kind);
-      const kb = ['chat', 'embedding', 'image', 'audio'].indexOf(b.kind);
+      const ka = ['chat', 'embedding', 'image', 'audio', 'video'].indexOf(a.kind);
+      const kb = ['chat', 'embedding', 'image', 'audio', 'video'].indexOf(b.kind);
       return (ka - kb) || String(a.displayName).localeCompare(String(b.displayName));
     });
   }
@@ -302,8 +310,8 @@ keysRouter.get('/', (_req: Request, res: Response) => {
   }
   for (const list of platformModelsMap.values()) {
     list.sort((a, b) => {
-      const ka = ['chat', 'embedding', 'image', 'audio'].indexOf(a.kind);
-      const kb = ['chat', 'embedding', 'image', 'audio'].indexOf(b.kind);
+      const ka = ['chat', 'embedding', 'image', 'audio', 'video'].indexOf(a.kind);
+      const kb = ['chat', 'embedding', 'image', 'audio', 'video'].indexOf(b.kind);
       return (ka - kb) || String(a.displayName).localeCompare(String(b.displayName));
     });
   }
@@ -568,11 +576,17 @@ keysRouter.get('/:id/discover-models', async (req: Request, res: Response) => {
       return;
     }
 
-    // Filter out models that already exist in the database
-    const existingModels = db.prepare(
-      'SELECT model_id FROM models WHERE platform = ? AND key_id = ?'
-    ).all(keyRow.platform, keyId) as { model_id: string }[];
-    const existingIds = new Set(existingModels.map(m => m.model_id));
+    // Filter out models that already exist in ANY model table (chat, embedding,
+    // or media). Without this, a model already added as an embedding would
+    // reappear in the discovery dialog and could be re-added as a chat model.
+    const existingIds = new Set<string>();
+    for (const table of ['models', 'embedding_models', 'media_models']) {
+      for (const row of db.prepare(
+        `SELECT model_id FROM ${table} WHERE platform = ? AND key_id = ?`,
+      ).all(keyRow.platform, keyId) as { model_id: string }[]) {
+        existingIds.add(row.model_id);
+      }
+    }
 
     const availableModels = models.filter(model => !existingIds.has(model.id));
 
@@ -618,27 +632,38 @@ keysRouter.post('/:id/add-models', async (req: Request, res: Response) => {
       { iv: string; auth_tag: string };
     const apiKey = decrypt(keyRow.encrypted_key, keyCrypto.iv, keyCrypto.auth_tag);
 
-    // Prefer the client-supplied list (the dialog already discovered these
-    // models) — this avoids a SECOND upstream /models fetch that could hang or
-    // be rate-limited immediately after the discover call. Fall back to a
-    // re-discovery only when the client sent ids without metadata.
-    let modelsToAdd: Array<{ id: string; name: string; supportsTools?: boolean; supportsVision?: boolean }>;
+    // Build the list of models to add, preserving the `kind` classification so
+    // each model is routed to the correct database table (chat → models,
+    // embedding → embedding_models, image/audio/video → media_models).
+    type ModelToAdd = {
+      id: string;
+      name: string;
+      supportsTools?: boolean;
+      supportsVision?: boolean;
+      kind: ModelKind;
+    };
+
+    let modelsToAdd: ModelToAdd[];
+    let resolvedProvider: BaseProvider | undefined;
 
     if (Array.isArray(modelPayload) && modelPayload.length > 0) {
       modelsToAdd = modelPayload
         .filter((m: any) => m && typeof m.id === 'string' && m.id.length > 0)
-        .map((m: any) => ({
+        .map((m: any): ModelToAdd => ({
           id: m.id,
           name: typeof m.name === 'string' && m.name.length > 0 ? m.name : m.id,
           supportsTools: !!m.supportsTools,
           supportsVision: !!m.supportsVision,
+          // Use the kind from the discovery response; fall back to heuristic
+          // classification for clients that sent ids without metadata.
+          kind: (typeof m.kind === 'string' ? m.kind : classifyModel(m.id)) as ModelKind,
         }));
     } else {
       // Custom (user-supplied base_url) providers must be resolved with their
       // stored base URL, otherwise resolveProvider('custom') returns undefined
       // and discovery silently fails.
-      const provider = resolveProvider(keyRow.platform as Platform, keyRow.base_url);
-      if (!provider || !provider.getAvailableModels) {
+      resolvedProvider = resolveProvider(keyRow.platform as Platform, keyRow.base_url);
+      if (!resolvedProvider || !resolvedProvider.getAvailableModels) {
         res.status(400).json({ error: { message: 'Provider does not support model discovery' } });
         return;
       }
@@ -646,51 +671,139 @@ keysRouter.post('/:id/add-models', async (req: Request, res: Response) => {
       // Keyless/sentinel rows (local Ollama, vLLM, anonymous gateways) store
       // 'no-key' instead of a real credential. Don't send `Bearer no-key` when
       // listing models — mark the provider keyless so it omits the auth header.
-      if (apiKey === 'no-key') provider.keyless = true;
+      if (apiKey === 'no-key') resolvedProvider.keyless = true;
 
-      const models = await provider.getAvailableModels(apiKey);
+      const models = await resolvedProvider.getAvailableModels(apiKey);
       if (!models) {
         res.status(400).json({ error: { message: 'Failed to discover models' } });
         return;
       }
 
-      modelsToAdd = models.filter(model => (modelIds as string[]).includes(model.id));
+      modelsToAdd = models
+        .filter(model => (modelIds as string[]).includes(model.id))
+        .map((m): ModelToAdd => ({
+          id: m.id,
+          name: m.name,
+          supportsTools: m.supportsTools,
+          supportsVision: m.supportsVision,
+          kind: m.kind ?? classifyModel(m.id),
+        }));
     }
+
+    // Resolve the provider (if not already resolved above) so we can access its
+    // baseUrl for embedding dimension probes.
+    if (!resolvedProvider) {
+      resolvedProvider = resolveProvider(keyRow.platform as Platform, keyRow.base_url);
+    }
+    // For OpenAI-compat platforms, the provider's baseUrl lets us probe
+    // embedding dimensions via the standard /embeddings endpoint.
+    const embeddingBaseUrl = resolvedProvider instanceof OpenAICompatProvider
+      ? resolvedProvider.baseUrl
+      : null;
 
     let addedCount = 0;
 
     for (const model of modelsToAdd) {
       try {
-        const existing = db.prepare(
-          'SELECT id FROM models WHERE platform = ? AND model_id = ?'
-        ).get(keyRow.platform, model.id) as { id: number } | undefined;
+        if (model.kind === 'chat') {
+          // ── Chat model → `models` table + fallback_config ──
+          const existing = db.prepare(
+            'SELECT id FROM models WHERE platform = ? AND model_id = ?',
+          ).get(keyRow.platform, model.id) as { id: number } | undefined;
 
-        if (!existing) {
-          const info = db.prepare(`
-            INSERT INTO models (platform, model_id, display_name, intelligence_rank, speed_rank, size_label,
-                             rpm_limit, rpd_limit, tpm_limit, tpd_limit, context_window,
-                             enabled, supports_vision, supports_tools, key_id)
-            VALUES (?, ?, ?, 50, 5, 'Medium', 60, 1000, null, null, 262144, 1, ?, ?, ?)
-          `).run(
-            keyRow.platform,
-            model.id,
-            model.name,
-            model.supportsVision ? 1 : 0,
-            1, // always enable tools when adding models to key
-            keyId
-          );
-          const newId = Number(info.lastInsertRowid);
-          addedCount++;
+          if (!existing) {
+            const info = db.prepare(`
+              INSERT INTO models (platform, model_id, display_name, intelligence_rank, speed_rank, size_label,
+                               rpm_limit, rpd_limit, tpm_limit, tpd_limit, context_window,
+                               enabled, supports_vision, supports_tools, key_id)
+              VALUES (?, ?, ?, 50, 5, 'Medium', 60, 1000, null, null, 262144, 1, ?, ?, ?)
+            `).run(
+              keyRow.platform,
+              model.id,
+              model.name,
+              model.supportsVision ? 1 : 0,
+              1, // always enable tools when adding models to key
+              keyId,
+            );
+            const newId = Number(info.lastInsertRowid);
+            addedCount++;
 
-          // The Models page (GET /api/fallback) is a `fallback_config JOIN
-          // models` — a model only appears there if it has a companion
-          // fallback_config row. Without this, discovered models are written to
-          // `models` but stay invisible in the UI. Append to the chain with the
-          // next priority (mirrors the custom-provider registration path).
-          const inChain = db.prepare('SELECT 1 FROM fallback_config WHERE model_db_id = ?').get(newId);
-          if (!inChain) {
-            const max = db.prepare('SELECT COALESCE(MAX(priority), 0) AS m FROM fallback_config').get() as { m: number };
-            db.prepare('INSERT INTO fallback_config (model_db_id, priority, enabled) VALUES (?, ?, 1)').run(newId, max.m + 1);
+            // The Models page (GET /api/fallback) is a `fallback_config JOIN
+            // models` — a model only appears there if it has a companion
+            // fallback_config row. Without this, discovered models are written to
+            // `models` but stay invisible in the UI. Append to the chain with the
+            // next priority (mirrors the custom-provider registration path).
+            const inChain = db.prepare('SELECT 1 FROM fallback_config WHERE model_db_id = ?').get(newId);
+            if (!inChain) {
+              const max = db.prepare('SELECT COALESCE(MAX(priority), 0) AS m FROM fallback_config').get() as { m: number };
+              db.prepare('INSERT INTO fallback_config (model_db_id, priority, enabled) VALUES (?, ?, 1)').run(newId, max.m + 1);
+            }
+          }
+        } else if (model.kind === 'embedding') {
+          // ── Embedding model → `embedding_models` table ──
+          // Probe the vector dimension via the provider's embedding endpoint.
+          // If the probe fails (model isn't actually an embedding model,
+          // provider doesn't support /embeddings, network error…), skip it
+          // rather than inserting a row with a bogus dimension that would
+          // corrupt downstream vector stores.
+          const existing = db.prepare(
+            'SELECT id FROM embedding_models WHERE platform = ? AND model_id = ?',
+          ).get(keyRow.platform, model.id) as { id: number } | undefined;
+
+          if (!existing) {
+            let dimensions: number;
+            try {
+              dimensions = await probeDimensionsForPlatform(
+                keyRow.platform, apiKey, model.id,
+                keyRow.platform === 'custom' ? keyRow.base_url : embeddingBaseUrl,
+              );
+            } catch (probeErr) {
+              console.warn(`[${keyRow.platform}] Skipping embedding model ${model.id}: dimension probe failed:`, probeErr);
+              continue;
+            }
+            const maxPriority = (db.prepare(
+              'SELECT COALESCE(MAX(priority), 0) AS m FROM embedding_models WHERE family = ?',
+            ).get(model.id) as { m: number }).m;
+            db.prepare(`
+              INSERT INTO embedding_models
+                (family, platform, model_id, display_name, dimensions, max_input_tokens, priority, enabled, quota_label, key_id)
+              VALUES (?, ?, ?, ?, ?, NULL, ?, 1, ?, ?)
+            `).run(
+              model.id,              // family defaults to the model id
+              keyRow.platform,
+              model.id,
+              model.name,
+              dimensions,
+              maxPriority + 1,
+              `${keyRow.platform} (discovered)`,
+              keyId,
+            );
+            addedCount++;
+          }
+        } else {
+          // ── Image / audio / video model → `media_models` table ──
+          const existing = db.prepare(
+            'SELECT id FROM media_models WHERE platform = ? AND model_id = ?',
+          ).get(keyRow.platform, model.id) as { id: number } | undefined;
+
+          if (!existing) {
+            const maxPriority = (db.prepare(
+              'SELECT COALESCE(MAX(priority), 0) AS m FROM media_models WHERE modality = ?',
+            ).get(model.kind) as { m: number }).m;
+            db.prepare(`
+              INSERT INTO media_models
+                (platform, model_id, display_name, modality, priority, enabled, quota_label, key_id)
+              VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+            `).run(
+              keyRow.platform,
+              model.id,
+              model.name,
+              model.kind,             // 'image' | 'audio' | 'video'
+              maxPriority + 1,
+              `${keyRow.platform} (discovered)`,
+              keyId,
+            );
+            addedCount++;
           }
         }
       } catch (err) {

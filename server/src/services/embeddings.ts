@@ -160,6 +160,82 @@ export async function probeEmbeddingDimensions(baseUrl: string, key: string, mod
   return vector.length;
 }
 
+/**
+ * Probe embedding dimensions for a model on a given platform. Used by the
+ * model-discovery add-models flow to fill in the NOT NULL `dimensions` column
+ * when an embedding model is auto-classified from a provider's /v1/models list.
+ *
+ * Platform-specific endpoints mirror the switch in callProvider(): Google and
+ * NVIDIA have non-standard URLs / params; Cloudflare's key is account_id:token;
+ * custom providers use their stored base URL; all other OpenAI-compat platforms
+ * use the provider's baseUrl (passed in from the resolved provider instance).
+ *
+ * Throws on failure — the caller should catch and fall back to a default.
+ */
+export async function probeDimensionsForPlatform(
+  platform: string,
+  key: string,
+  modelId: string,
+  baseUrl?: string | null,
+): Promise<number> {
+  // Cloudflare key is "account_id:token" — extract the parts.
+  if (platform === 'cloudflare') {
+    const sep = key.indexOf(':');
+    if (sep === -1) throw new EmbeddingsError('cloudflare key is not in account_id:token form', 500);
+    const accountId = key.slice(0, sep);
+    const token = key.slice(sep + 1);
+    return probeEmbeddingDimensions(
+      `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1`,
+      token, modelId,
+    );
+  }
+
+  // NVIDIA needs input_type='query' for the probe to succeed.
+  if (platform === 'nvidia') {
+    const out = await openAiStyleEmbed(
+      'https://integrate.api.nvidia.com/v1/embeddings',
+      'nvidia', key, modelId, ['dimension probe'], { input_type: 'query' },
+    );
+    const vector = out.vectors[0];
+    if (!Array.isArray(vector) || vector.length === 0) {
+      throw new EmbeddingsError('upstream returned malformed embeddings', 502);
+    }
+    return vector.length;
+  }
+
+  // Google has a dedicated OpenAI-compat embedding endpoint.
+  if (platform === 'google') {
+    return probeEmbeddingDimensions(
+      'https://generativelanguage.googleapis.com/v1beta/openai',
+      key, modelId,
+    );
+  }
+
+  // OpenRouter / GitHub have their own embedding endpoints.
+  if (platform === 'openrouter') {
+    return probeEmbeddingDimensions('https://openrouter.ai/api/v1', key, modelId);
+  }
+  if (platform === 'github') {
+    return probeEmbeddingDimensions('https://models.github.ai/inference', key, modelId);
+  }
+
+  // Custom providers use their stored base URL.
+  if (platform === 'custom') {
+    if (!baseUrl) throw new EmbeddingsError('custom embedding needs base_url', 500);
+    return probeEmbeddingDimensions(baseUrl, key, modelId);
+  }
+
+  // For all other OpenAI-compat platforms, use the provider's baseUrl if
+  // available (passed in from the resolved OpenAICompatProvider instance).
+  if (baseUrl) {
+    return probeEmbeddingDimensions(baseUrl, key, modelId);
+  }
+
+  throw new EmbeddingsError(
+    `cannot probe embedding dimensions for platform '${platform}' (no baseUrl)`, 500,
+  );
+}
+
 async function callProvider(row: EmbeddingModelRow, credential: ProviderCredential, inputs: string[], dimensions?: number): Promise<ProviderCallResult> {
   const { key } = credential;
   switch (row.platform) {

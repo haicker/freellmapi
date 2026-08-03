@@ -7,12 +7,15 @@ import type { ApiKey } from '../../../../shared/types'
 import { X, Loader } from 'lucide-react'
 import { useI18n } from '@/i18n'
 
+type ModelKind = 'chat' | 'embedding' | 'image' | 'audio' | 'video'
+
 interface Model {
   id: string
   name: string
   supportsTools?: boolean
   supportsVision?: boolean
   free?: boolean
+  kind?: ModelKind
 }
 
 interface DiscoverModelsResponse {
@@ -27,11 +30,20 @@ interface ModelSelectionDialogProps {
   onOpenChange: (open: boolean) => void
 }
 
+// Badge style + i18n key for each non-chat kind. Chat is the default — no badge.
+const KIND_BADGES: Record<Exclude<ModelKind, 'chat'>, { bg: string; text: string; i18nKey: string }> = {
+  embedding: { bg: 'bg-purple-100', text: 'text-purple-800', i18nKey: 'keys.kindEmbedding' },
+  image:     { bg: 'bg-orange-100', text: 'text-orange-800', i18nKey: 'keys.kindImage' },
+  audio:     { bg: 'bg-pink-100',   text: 'text-pink-800',   i18nKey: 'keys.kindAudio' },
+  video:     { bg: 'bg-red-100',    text: 'text-red-800',    i18nKey: 'keys.kindVideo' },
+}
+
 export function ModelSelectionDialog({ keyData, open, onOpenChange }: ModelSelectionDialogProps) {
   const { t } = useI18n()
   const queryClient = useQueryClient()
   const [selectedModels, setSelectedModels] = useState<string[]>([])
   const [freeOnly, setFreeOnly] = useState(false)
+  const [kindFilter, setKindFilter] = useState<ModelKind | 'all'>('all')
 
   // Fetch available models
   const { data: modelsData, isLoading: modelsLoading, error: modelsError } = useQuery<DiscoverModelsResponse>({
@@ -41,9 +53,10 @@ export function ModelSelectionDialog({ keyData, open, onOpenChange }: ModelSelec
   })
 
   // Add selected models. We send the full model objects we already discovered
-  // (id + name + capability flags) so the backend doesn't have to re-fetch the
-  // upstream /models endpoint a second time — that second call was the main
-  // cause of the "add" action hanging on slow / keyless / local providers.
+  // (id + name + capability flags + kind) so the backend doesn't have to
+  // re-fetch the upstream /models endpoint a second time — that second call was
+  // the main cause of the "add" action hanging on slow / keyless / local
+  // providers. The `kind` field tells the backend which table to insert into.
   const addModels = useMutation({
     mutationFn: (modelsToAdd: Model[]) =>
       apiFetch(`/api/keys/${keyData.id}/add-models`, {
@@ -55,6 +68,8 @@ export function ModelSelectionDialog({ keyData, open, onOpenChange }: ModelSelec
       queryClient.invalidateQueries({ queryKey: ['health'] })
       queryClient.invalidateQueries({ queryKey: ['fallback'] })
       queryClient.invalidateQueries({ queryKey: ['models'] })
+      queryClient.invalidateQueries({ queryKey: ['embeddings'] })
+      queryClient.invalidateQueries({ queryKey: ['media'] })
       onOpenChange(false)
       setSelectedModels([])
     },
@@ -62,7 +77,16 @@ export function ModelSelectionDialog({ keyData, open, onOpenChange }: ModelSelec
 
   const models = modelsData?.availableModels || []
   const hasFreeModels = models.some(m => m.free)
-  const filteredModels = freeOnly ? models.filter(m => m.free) : models
+
+  // Distinct kinds present in the discovery result (defaulting to 'chat').
+  const availableKinds = new Set<ModelKind>(models.map(m => m.kind ?? 'chat'))
+  const hasNonChatKinds = [...availableKinds].some(k => k !== 'chat')
+
+  const filteredModels = models.filter(m => {
+    if (freeOnly && !m.free) return false
+    if (kindFilter !== 'all' && (m.kind ?? 'chat') !== kindFilter) return false
+    return true
+  })
 
   const handleModelToggle = (modelId: string) => {
     setSelectedModels(prev =>
@@ -146,11 +170,35 @@ export function ModelSelectionDialog({ keyData, open, onOpenChange }: ModelSelec
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                     <div className="text-sm text-muted-foreground">
                       {t('keys.availableModelsCount', { count: filteredModels.length })}
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
+                      {/* Kind filter — only shown when the provider lists
+                          non-chat models (embedding / image / audio / video).
+                          Lets the user focus on one model type at a time. */}
+                      {hasNonChatKinds && (
+                        <>
+                          <Button
+                            variant={kindFilter === 'all' ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => setKindFilter('all')}
+                          >
+                            {t('keys.filterAll')}
+                          </Button>
+                          {[...availableKinds].sort().map(k => (
+                            <Button
+                              key={k}
+                              variant={kindFilter === k ? 'default' : 'outline'}
+                              size="sm"
+                              onClick={() => setKindFilter(k)}
+                            >
+                              {k === 'chat' ? t('keys.kindChat') : t(KIND_BADGES[k].i18nKey)}
+                            </Button>
+                          ))}
+                        </>
+                      )}
                       {hasFreeModels && (
                         <Button
                           variant={freeOnly ? 'default' : 'outline'}
@@ -170,45 +218,54 @@ export function ModelSelectionDialog({ keyData, open, onOpenChange }: ModelSelec
                   </div>
 
                   <div className="max-h-96 overflow-y-auto border rounded-lg">
-                    {filteredModels.map((model) => (
-                      <div
-                        key={model.id}
-                        className="flex items-center p-3 border-b last:border-b-0 hover:bg-muted/50 cursor-pointer"
-                        onClick={() => handleModelToggle(model.id)}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedModels.includes(model.id)}
-                          onChange={() => handleModelToggle(model.id)}
-                          className="mr-3"
-                        />
-                        <div className="flex-1">
-                          <div className="font-medium text-sm">
-                            {model.name}
-                          </div>
-                          <div className="text-xs text-muted-foreground font-mono">
-                            {model.id}
-                          </div>
-                          <div className="flex gap-2 mt-1">
-                            {model.free && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-emerald-100 text-emerald-800">
-                                Free
-                              </span>
-                            )}
-                            {model.supportsTools && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800">
-                                Tools
-                              </span>
-                            )}
-                            {model.supportsVision && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 text-green-800">
-                                Vision
-                              </span>
-                            )}
+                    {filteredModels.map((model) => {
+                      const kind = model.kind ?? 'chat'
+                      const badge = kind !== 'chat' ? KIND_BADGES[kind] : null
+                      return (
+                        <div
+                          key={model.id}
+                          className="flex items-center p-3 border-b last:border-b-0 hover:bg-muted/50 cursor-pointer"
+                          onClick={() => handleModelToggle(model.id)}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedModels.includes(model.id)}
+                            onChange={() => handleModelToggle(model.id)}
+                            className="mr-3"
+                          />
+                          <div className="flex-1">
+                            <div className="font-medium text-sm">
+                              {model.name}
+                            </div>
+                            <div className="text-xs text-muted-foreground font-mono">
+                              {model.id}
+                            </div>
+                            <div className="flex gap-2 mt-1 flex-wrap">
+                              {badge && (
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs ${badge.bg} ${badge.text}`}>
+                                  {t(badge.i18nKey)}
+                                </span>
+                              )}
+                              {model.free && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-emerald-100 text-emerald-800">
+                                  Free
+                                </span>
+                              )}
+                              {model.supportsTools && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800">
+                                  Tools
+                                </span>
+                              )}
+                              {model.supportsVision && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 text-green-800">
+                                  Vision
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
 
                   <div className="flex justify-between items-center mt-4">
